@@ -183,51 +183,54 @@ node tools/build-client.mjs   # 或 npm run build：重新打包 client.js
 - 打包需要 esbuild 子进程，在 DSH 的 workspace 沙箱下会 EPERM，需要完整权限或在工作区外执行。
 - **Client 半热更**：`client.js` 一变，宿主就会重新构建并提供新版本，刷新页面即可。
 - **Host 半不热更**：`hmr.root` 是空数组，`index.js` 的改动要**重启一次 dsh** 才生效（会话本身会保留）。
-- 构建依赖：`esbuild`、`@esbuild/win32-x64`、`@xterm/xterm`、`@xterm/addon-fit`，装在本包自己的 `node_modules` 里，不进 profile。
+- 构建依赖：`esbuild`、`@xterm/xterm`、`@xterm/addon-fit`，装在本包自己的 `node_modules` 里（不进 profile，也不提交）。
+  `esbuild` 的平台二进制来自它的可选依赖，锁文件里已含 win32/darwin/linux 各平台，换机器 `pnpm install` 即可。
 
-## 7. 代码在哪 / 搬到自己的仓库 / 明天继续
+## 7. 仓库、安装位置与继续开发
 
-插件源码就在这个目录：
+**这个仓库就是插件的唯一源码**（根目录即插件目录），克隆下来即可：
 
+```powershell
+git clone https://github.com/abc6324562/dsh-twin-coding.git
+cd dsh-twin-coding
+pnpm install        # 只有要重新构建 client.js 时才需要
 ```
-C:\Users\Administrator\Documents\deepseek-harness\default-workspace\python-workspace-plugin
-```
 
-要提交的（12 个文件，约 550 KB）：
+提交清单（14 个文件，约 550 KB）：
 
 | 文件 | 说明 |
 |---|---|
 | `package.json`、`cordis.patch.yml` | bundle 清单与插入行 |
 | `index.js` | Host 半（文件 API、运行、venv、PTY、shell） |
 | `src/client.js` | Client 半**源码**（改这个） |
-| `client.js` | 构建产物（提交它，别人不用装 esbuild 也能直接用） |
+| `client.js` | 构建产物（已提交，不构建也能直接用） |
 | `tools/xterm-entry.js`、`tools/build-client.mjs` | 打包脚本 |
-| `locale/*.json`、`icon.svg`、`README.md`、`.gitignore` | 资源与文档 |
-| `pnpm-lock.yaml` | 构建依赖锁（可复现） |
+| `locale/*.json`、`icon.svg`、`README.md`、`.gitignore`、`.gitattributes` | 资源与文档 |
+| `pnpm-lock.yaml` | 构建依赖锁（含各平台二进制） |
 
-不要提交的：`node_modules/`（15.8 MB 的 esbuild + xterm）、`.build/`（打包临时目录），已在 `.gitignore` 里。
+不提交：`node_modules/`、`.build/`（已在 `.gitignore`）。
 
-### ⚠️ 移动目录会让 profile 失联
+### 安装位置是每台机器自己的事
 
-当前 profile 用的是**绝对路径 link**：
+DSH 的 profile 用**绝对路径** link 到插件目录，所以**不要把这个路径写进仓库**，也不要假设别人的路径一样：
 
 ```
-~/.dsh/profiles/web/package.json
-  "@local/python-workspace": "link:C:/Users/Administrator/Documents/.../python-workspace-plugin"
+<profile>/package.json
+  "@local/python-workspace": "link:<你本机 clone 下来的目录>"
 ```
 
-把目录搬走之后，插件会加载失败。搬家后需要「卸掉旧的、从新路径装一次」：
+换机器 / 搬家后，在新机器上重装一次即可：
 
 ```
 plugin_manager  remove_bundle   target: "@local/python-workspace"
-plugin_manager  install_bundle  target: "<新路径>"
+plugin_manager  install_bundle  target: "<本机插件目录的绝对路径>"
 ```
 
-### 明天继续的检查清单
+### 继续开发的检查清单
 
-1. 改 UI → 改 `src/client.js` → `node tools/build-client.mjs` → **刷新页面**
+1. 改 UI → 改 `src/client.js` → `npm run build` → **刷新页面**
 2. 改 Host → 改 `index.js` → **重启 dsh 一次**（Host 代码不热更，`hmr.root: []`）
-3. 自测：`node ../.python-workspace-check/host-check.mjs <临时目录>`（31+ 项）、`node ../.python-workspace-check/highlight-check.mjs`、`node ../.python-workspace-check/client-smoke.mjs`
+3. 自测脚本不随仓库发布（在本机的工作区 `.python-workspace-check/` 里）
 4. 已知待办：shell 目前是 `cmd.exe`，想换 PowerShell 就改 `index.js` 的 `shellFor()`（优先 `pwsh.exe` → `powershell.exe` → `cmd.exe`）
 
 ## 8. 想继续加的东西（按代价从小到大）

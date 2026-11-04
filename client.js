@@ -772,32 +772,13 @@ window.__ModuleLoader__.load({
       return out
     }
 
-    /** One shared promise for the xterm asset served beside this module. */
-    let xtermLoader
-
     /**
-     * Load the terminal asset on first use. It is a separate package asset so
-     * the plugin's own module stays dependency-free.
-     * @returns the parked xterm classes.
+     * The xterm classes the build parked on the window before this module ran.
+     * @returns them, or a rejection when the bundle was built without them.
      */
     function loadXterm() {
-      if (xtermLoader !== undefined) return xtermLoader
-      xtermLoader = new Promise((resolve, reject) => {
-        if (window.__PythonWorkspaceXterm !== undefined) {
-          resolve(window.__PythonWorkspaceXterm)
-          return
-        }
-        const script = document.createElement('script')
-        script.src = '/plugins/@local/python-workspace/assets/xterm.js'
-        script.async = true
-        script.onload = () => {
-          if (window.__PythonWorkspaceXterm === undefined) reject(new Error('the xterm asset did not expose its classes'))
-          else resolve(window.__PythonWorkspaceXterm)
-        }
-        script.onerror = () => reject(new Error('the xterm asset failed to load'))
-        document.head.appendChild(script)
-      })
-      return xtermLoader
+      if (window.__PythonWorkspaceXterm !== undefined) return Promise.resolve(window.__PythonWorkspaceXterm)
+      return Promise.reject(new Error('the bundled terminal is missing'))
     }
 
     /**
