@@ -1,0 +1,5 @@
+﻿# Keep sources LF on every platform; the generated client.js is committed too.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary

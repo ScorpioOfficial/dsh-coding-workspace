@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Python 工作区",
+    "description": "右侧栏工作区：选择文件夹，浏览并编辑文件，用系统 Python 或该文件夹下的 .venv 运行代码。"
+  }
+}

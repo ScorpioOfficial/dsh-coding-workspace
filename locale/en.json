@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Python workspace",
+    "description": "A right-sidebar workspace: pick a folder, browse and edit files, then run Python with the system interpreter or the folder's .venv."
+  }
+}

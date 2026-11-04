@@ -1,0 +1,3 @@
+- insert:
+    - id: python-workspace
+      name: '@local/python-workspace'
