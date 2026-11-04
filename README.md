@@ -156,8 +156,27 @@ node ..\.python-workspace-check\host-check.mjs <一个临时目录>
 
 ## 6. 构建与生效规则
 
+### 换台电脑 / 从 clone 开始
+
 ```powershell
-node tools/build-client.mjs   # 重新打包 client.js（xterm + src/client.js）
+git clone https://github.com/abc6324562/dsh-twin-coding.git
+cd dsh-twin-coding
+pnpm install          # 或 npm install：装 esbuild + xterm（构建用）
+npm run build         # 重新打包 client.js（xterm + src/client.js）
+```
+
+然后把整个目录装进 DSH 当前 profile：
+
+```
+plugin_manager  install_bundle  target: "<这个目录的绝对路径>"
+```
+
+装完 **刷新页面** 即可；如果这次是首次安装，Host 半会随之生效。
+
+### 改代码之后
+
+```powershell
+node tools/build-client.mjs   # 或 npm run build：重新打包 client.js
 ```
 
 - **改 `src/client.js` 之后必须跑一次构建**；`client.js` 是产物，手改会被覆盖。
