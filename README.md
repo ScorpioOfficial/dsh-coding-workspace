@@ -168,4 +168,6 @@ dsh-coding-workspace/
 
 ## License
 
-未指定（若要发布请先选择许可证并补充 `LICENSE`）。
+[MIT](LICENSE) © ScorpioOfficial
+
+插件在宿主进程里**以你的权限运行**：它能读写你在面板中选定目录下的文件，也能启动 Python / shell 子进程。所有 HTTP 接口都要求同源且带页面自己的登录 Cookie，路径被限制在已打开的目录内；但请只安装你信任的来源。

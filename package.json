@@ -1,9 +1,31 @@
 {
   "name": "@local/python-workspace",
-  "version": "1.2.0",
-  "private": true,
-  "description": "A right-sidebar Python workspace: open a folder, browse files, edit and run Python.",
+  "version": "1.2.1",
+  "description": "A right-sidebar Coding workspace for DeepSeek Harness: browse and edit a folder, pick a Python interpreter, and run code in an embedded real terminal.",
+  "license": "MIT",
+  "author": "ScorpioOfficial",
   "type": "module",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "coding-workspace",
+    "python",
+    "ide",
+    "terminal",
+    "xterm"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ScorpioOfficial/dsh-coding-workspace.git"
+  },
+  "homepage": "https://github.com/ScorpioOfficial/dsh-coding-workspace#readme",
+  "bugs": {
+    "url": "https://github.com/ScorpioOfficial/dsh-coding-workspace/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node tools/build-client.mjs"
   },
@@ -18,7 +40,9 @@
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",
-    "icon.svg"
+    "icon.svg",
+    "src",
+    "tools"
   ],
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
