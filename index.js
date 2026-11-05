@@ -6,22 +6,22 @@
  * it has no Host Remote namespace of its own; a small JSON API keeps the plain
  * JavaScript bundle buildless:
  *
- *   GET  /python-workspace/api/env?root=<dir>        interpreter availability
- *   GET  /python-workspace/api/list?root=<dir>&path= one directory listing
- *   GET  /python-workspace/api/read?root=<dir>&path= one UTF-8 file
- *   POST /python-workspace/api/write                 { root, path, content }
- *   POST /python-workspace/api/run                   { root, path, interpreter }
- *   GET  /python-workspace/api/run?runId=            collected stdout/stderr
- *   POST /python-workspace/api/stop                  { runId }
- *   POST /python-workspace/api/input                 { runId, data } -> the process's stdin
- *   POST /python-workspace/api/pty                   { root, path, interpreter, cols, rows } -> a real PTY
- *   POST /python-workspace/api/shell                 { root, cols, rows } -> an interactive shell PTY
- *   POST /python-workspace/api/shell/run             { termId, root, path, interpreter } -> types the command
- *   GET  /python-workspace/api/pty?termId=&since=    terminal output since a cursor
- *   POST /python-workspace/api/pty/input             { termId, data }
- *   POST /python-workspace/api/pty/resize            { termId, cols, rows }
- *   POST /python-workspace/api/pty/close             { termId }
- *   POST /python-workspace/api/venv                  { root } -> creates .venv
+ *   GET  /coding-workspace/api/env?root=<dir>        interpreter availability
+ *   GET  /coding-workspace/api/list?root=<dir>&path= one directory listing
+ *   GET  /coding-workspace/api/read?root=<dir>&path= one UTF-8 file
+ *   POST /coding-workspace/api/write                 { root, path, content }
+ *   POST /coding-workspace/api/run                   { root, path, interpreter }
+ *   GET  /coding-workspace/api/run?runId=            collected stdout/stderr
+ *   POST /coding-workspace/api/stop                  { runId }
+ *   POST /coding-workspace/api/input                 { runId, data } -> the process's stdin
+ *   POST /coding-workspace/api/pty                   { root, path, interpreter, cols, rows } -> a real PTY
+ *   POST /coding-workspace/api/shell                 { root, cols, rows } -> an interactive shell PTY
+ *   POST /coding-workspace/api/shell/run             { termId, root, path, interpreter } -> types the command
+ *   GET  /coding-workspace/api/pty?termId=&since=    terminal output since a cursor
+ *   POST /coding-workspace/api/pty/input             { termId, data }
+ *   POST /coding-workspace/api/pty/resize            { termId, cols, rows }
+ *   POST /coding-workspace/api/pty/close             { termId }
+ *   POST /coding-workspace/api/venv                  { root } -> creates .venv
  *
  * Every path is resolved against the folder the user picked and refused when it
  * escapes that folder. Requests are rejected unless they carry the page's own
@@ -32,7 +32,7 @@ import { existsSync, promises as fs } from 'node:fs'
 import path from 'node:path'
 
 /** Web route prefix owned by this plugin. */
-export const ROUTE_PREFIX = '/python-workspace'
+export const ROUTE_PREFIX = '/coding-workspace'
 /** Hard dependency: without a Web server there is nothing to serve. */
 export const inject = ['webServer']
 
@@ -601,11 +601,11 @@ export function apply(ctx) {
     }
   }
 
-  ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: ROUTE_PREFIX, handler: route }), 'python-workspace: JSON API')
+  ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: ROUTE_PREFIX, handler: route }), 'coding-workspace: JSON API')
   ctx.effect(() => () => {
     for (const run of runs.values()) { try { run.child?.kill() } catch { /* already gone */ } }
     runs.clear()
-  }, 'python-workspace: run lifetime')
+  }, 'coding-workspace: run lifetime')
 }
 
 /** Testing seam: the pure helpers, used by the workspace harness only. */

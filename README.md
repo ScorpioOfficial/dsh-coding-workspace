@@ -68,11 +68,11 @@ plugin_manager  install_bundle  target: "<本机 dsh-coding-workspace 目录的�
 
 ```yaml
 - insert:
-    - id: python-workspace
-      name: '@local/python-workspace'
+    - id: coding-workspace
+      name: '@scorpioofficial/coding-workspace'
 ```
 
-> 插件包名目前仍是 `@local/python-workspace`，HTTP 路由前缀为 `/python-workspace`；它们与仓库名不同名，功能不受影响。
+> 包名 `@scorpioofficial/coding-workspace`，HTTP 路由前缀 `/coding-workspace`。标签类型 id 就是包名，升级到该版本后**旧的标签页会失效**，关掉重开一个即可。
 
 ---
 
@@ -107,7 +107,7 @@ npm run build         # 重新打包 client.js（xterm + src/client.js）
 
 - **客户端改动**：改 `src/client.js` → `npm run build` → 刷新页面（宿主的 client 产物会自动重建）
 - **Host 改动**：改 `index.js` → **重启一次 dsh**（Host 代码不热更）
-- 自测脚本不随仓库发布（本机工作区的 `.python-workspace-check/`）：Host 44 项、分词 21 项、构建产物冒烟
+- 自测脚本不随仓库发布（本机工作区的 `.code-workspace-check/`）：Host 44 项、分词 21 项、构建产物冒烟
 
 ### 目录结构
 
@@ -124,7 +124,7 @@ dsh-coding-workspace/
 └─ icon.svg
 ```
 
-### Host 接口（`/python-workspace` 前缀，全部要求页面自己的登录 Cookie）
+### Host 接口（`/coding-workspace` 前缀，全部要求页面自己的登录 Cookie）
 
 | 方法 | 路径 | 作用 |
 |---|---|---|
@@ -160,7 +160,7 @@ dsh-coding-workspace/
 | 现象 | 原因 / 处理 |
 |---|---|
 | 面板空白、右侧栏提示"这类内容还没有可用的查看方式" | 客户端模块没加载。检查 `package.json` **不能有 UTF-8 BOM**，然后刷新；再不行重启 dsh |
-| `no route POST /python-workspace/api/...` | Host 半还是旧代码，**重启一次 dsh** |
+| `no route POST /coding-workspace/api/...` | Host 半还是旧代码，**重启一次 dsh** |
 | 终端没有提示符、打字没反应 | `/api/shell` 未生效（同上）或宿主没有终端 provider |
 | 换目录后弹 `that terminal is gone` 红字 | 旧版本竞态，已修复；若仍有，刷新即可 |
 

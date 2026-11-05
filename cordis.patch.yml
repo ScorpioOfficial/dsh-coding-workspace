@@ -1,3 +1,3 @@
 - insert:
-    - id: python-workspace
-      name: '@local/python-workspace'
+    - id: coding-workspace
+      name: '@scorpioofficial/coding-workspace'
