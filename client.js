@@ -1622,6 +1622,13 @@ window.__ModuleLoader__.load({
         PythonWorkspace,
       )), 'python-workspace: tab body')
 
+      // The chip title is owned here rather than captured at open time, so a
+      // rename also reaches tabs that were opened before it.
+      ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register(
+        { name: 'sidebar.right.pane.tab.title', key: TAB_ID, locale: NS },
+        () => h('span', { style: { whiteSpace: 'nowrap' } }, t('title')),
+      )), 'python-workspace: tab title')
+
       ctx.effect(() => ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
         name: 'conversation.session.header.utilities',
         id: 'python-workspace-open',
