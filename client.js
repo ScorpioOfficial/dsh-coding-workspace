@@ -381,6 +381,7 @@ window.__ModuleLoader__.load({
       output: 'Output',
       stdinHint: 'Send a line to the running process (Enter)',
       clear: 'Clear',
+      resize: 'Drag to resize',
       unsaved: 'Unsaved changes',
       running: 'Running…',
       exit: 'Exit',
@@ -422,6 +423,7 @@ window.__ModuleLoader__.load({
       output: '输出',
       stdinHint: '给运行中的进程发一行（回车发送）',
       clear: '清空',
+      resize: '拖动调整大小',
       unsaved: '有未保存的修改',
       running: '运行中…',
       exit: '退出码',
@@ -493,7 +495,7 @@ window.__ModuleLoader__.load({
         background: token('bg-layer-2'), flex: '0 0 auto',
       },
       console: {
-        flex: '0 0 36%', minHeight: 64, display: 'flex', flexDirection: 'column', minWidth: 0,
+        flex: '0 0 auto', minHeight: 64, display: 'flex', flexDirection: 'column', minWidth: 0,
         background: token('bg-layer-2'),
       },
       consoleCommand: {
@@ -575,6 +577,14 @@ window.__ModuleLoader__.load({
         color: token('label-primary'), fontSize: 11.5, fontFamily: 'inherit',
       },
       notice: { padding: '2px 8px 4px', fontSize: 11, color: token('state-error-primary') },
+      rowHandle: {
+        height: 5, flex: '0 0 auto', cursor: 'row-resize', background: 'transparent',
+        borderTop: `1px solid ${token('border-l1')}`,
+      },
+      colHandle: {
+        width: 5, flex: '0 0 auto', cursor: 'col-resize', background: 'transparent',
+        borderLeft: `1px solid ${token('border-l1')}`,
+      },
       entryButton: {
         display: 'inline-flex', alignItems: 'center', gap: 6, height: 26, padding: '0 8px 0 4px',
         borderRadius: 7, border: `1px solid ${token('border-l1')}`, background: token('bg-layer-1'),
@@ -661,6 +671,7 @@ window.__ModuleLoader__.load({
       '.pw-btn:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2)!important;border-color:var(--dsw-alias-border-l2)!important}',
       '.pw-menu-item:hover{background:color-mix(in srgb, var(--dsw-alias-brand-primary) 26%, transparent)!important;color:var(--dsw-alias-label-primary)!important}',
       '.pw-menu-item:active{background:color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, transparent)!important}',
+      '.pw-handle:hover{background:color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent)!important}',
     ].join('')
 
     /** Colors for the highlight layer: the host's own syntax palette, with
@@ -909,6 +920,8 @@ window.__ModuleLoader__.load({
         busy: '',
         selected: '',
         termCollapsed: false,
+        termHeight: 240,
+        treeWidth: 180,
         interpreterPath: '',
       })
 
@@ -1211,6 +1224,48 @@ window.__ModuleLoader__.load({
         const [draft, setDraft] = React.useState('')
         const [pickerOpen, setPickerOpen] = React.useState(false)
         const [customDraft, setCustomDraft] = React.useState('')
+        const [dragging, setDragging] = React.useState(null)
+        const dragRef = React.useRef(null)
+
+        /** Begin a divider drag; `kind` decides which dimension it moves. */
+        const startDrag = kind => (event) => {
+          event.preventDefault()
+          dragRef.current = {
+            kind,
+            x: event.clientX,
+            y: event.clientY,
+            termHeight: store.get().termHeight,
+            treeWidth: store.get().treeWidth,
+          }
+          setDragging(kind)
+        }
+
+        React.useEffect(() => {
+          if (dragging === null) return undefined
+          const previousUserSelect = document.body.style.userSelect
+          document.body.style.userSelect = 'none'
+          const move = (event) => {
+            const drag = dragRef.current
+            if (drag === null) return
+            if (drag.kind === 'term') {
+              const next = drag.termHeight - (event.clientY - drag.y)
+              store.set({ termHeight: Math.max(90, Math.min(window.innerHeight - 220, next)) })
+            } else {
+              const next = drag.treeWidth + (event.clientX - drag.x)
+              store.set({ treeWidth: Math.max(120, Math.min(600, next)) })
+            }
+          }
+          const end = () => { dragRef.current = null; setDragging(null) }
+          window.addEventListener('pointermove', move)
+          window.addEventListener('pointerup', end)
+          window.addEventListener('pointercancel', end)
+          return () => {
+            document.body.style.userSelect = previousUserSelect
+            window.removeEventListener('pointermove', move)
+            window.removeEventListener('pointerup', end)
+            window.removeEventListener('pointercancel', end)
+          }
+        }, [dragging])
         const pickerRef = React.useRef(null)
 
         // The three modes resolve through /api/env; anything else is a path.
@@ -1660,7 +1715,7 @@ window.__ModuleLoader__.load({
             })),
           state.notice !== '' ? h('div', { style: styles.notice }, state.notice) : null,
           h('div', { style: styles.main },
-            h('div', { ref: columnRef, style: styles.treeColumn },
+            h('div', { ref: columnRef, style: { ...styles.treeColumn, width: state.treeWidth } },
               h('div', {
                 ref: treeRef,
                 style: styles.tree,
@@ -1690,6 +1745,12 @@ window.__ModuleLoader__.load({
                   menu.target === null
                     ? null
                     : menuItem(t('delete'), () => setMenu({ ...menu, confirming: true }), true)))),
+            h('div', {
+              className: 'pw-handle',
+              style: styles.colHandle,
+              onPointerDown: startDrag('tree'),
+              title: t('resize'),
+            }),
             h('div', { style: styles.editorPane },
               h('div', { style: styles.paneHead },
                 h('span', {
@@ -1741,6 +1802,12 @@ window.__ModuleLoader__.load({
                     }
                   },
                 })),
+              state.termCollapsed ? null : h('div', {
+                className: 'pw-handle',
+                style: styles.rowHandle,
+                onPointerDown: startDrag('term'),
+                title: t('resize'),
+              }),
               h('div', { style: styles.outputHead },
                 h('span', { style: { flex: '1 1 auto' } }, t('output')),
                 state.running ? h('span', { style: styles.muted }, t('running')) : null,
@@ -1751,9 +1818,8 @@ window.__ModuleLoader__.load({
                       color: state.exitCode === 0 ? token('state-success-primary') : token('state-error-primary'),
                     },
                   }, `${t('exit')} ${state.exitCode}`)
-                  : null,
-                h(Button, { label: t('clear'), onClick: () => store.set({ output: '', echoes: [], exitCode: null, command: '' }) })),
-              h('div', { style: { ...styles.console, display: state.termCollapsed ? 'none' : 'flex' } },
+                  : null),
+              h('div', { style: { ...styles.console, height: state.termHeight, display: state.termCollapsed ? 'none' : 'flex' } },
                 h('style', null, CONSOLE_CSS),
                 state.command === '' ? null : h('div', { style: styles.consoleCommand, title: state.command }, state.command),
                 h('div', { ref: termHostRef, style: { ...styles.termHost, display: termReady && !state.fallback ? 'block' : 'none' } }),
