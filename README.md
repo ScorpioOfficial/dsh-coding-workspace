@@ -159,8 +159,8 @@ node ..\.python-workspace-check\host-check.mjs <一个临时目录>
 ### 换台电脑 / 从 clone 开始
 
 ```powershell
-git clone https://github.com/abc6324562/dsh-twin-coding.git
-cd dsh-twin-coding
+git clone https://github.com/abc6324562/dsh-coding-workspace.git
+cd dsh-coding-workspace
 pnpm install          # 或 npm install：装 esbuild + xterm（构建用）
 npm run build         # 重新打包 client.js（xterm + src/client.js）
 ```
@@ -191,8 +191,8 @@ node tools/build-client.mjs   # 或 npm run build：重新打包 client.js
 **这个仓库就是插件的唯一源码**（根目录即插件目录），克隆下来即可：
 
 ```powershell
-git clone https://github.com/abc6324562/dsh-twin-coding.git
-cd dsh-twin-coding
+git clone https://github.com/abc6324562/dsh-coding-workspace.git
+cd dsh-coding-workspace
 pnpm install        # 只有要重新构建 client.js 时才需要
 ```
 
