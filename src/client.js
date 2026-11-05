@@ -24,10 +24,10 @@ window.__ModuleLoader__.load({
 
     /** Copy for the panel; the panel owns every visible string. */
     const EN = {
-      title: 'Python',
+      title: 'Coding',
       entry: 'twin-coding',
-      entryHint: 'Open the Python workspace beside the chat',
-      guideTitle: 'Python workspace',
+      entryHint: 'Open the Coding workspace beside the chat',
+      guideTitle: 'Coding workspace',
       guideDescription: 'Open a folder, edit files, and run Python.',
       open: 'Open folder',
       follow: 'Session folder',
@@ -60,10 +60,10 @@ window.__ModuleLoader__.load({
       noPython: 'not found',
     }
     const ZH = {
-      title: 'Python',
+      title: 'Coding',
       entry: 'twin-coding',
-      entryHint: '在对话右侧打开 Python 工作区',
-      guideTitle: 'Python 工作区',
+      entryHint: '在对话右侧打开 Coding 工作区',
+      guideTitle: 'Coding 工作区',
       guideDescription: '打开文件夹、编辑文件并运行 Python。',
       open: '打开目录',
       follow: '会话目录',
@@ -512,7 +512,8 @@ window.__ModuleLoader__.load({
       const t = ctx.locale.bind(NS)
       ctx.effect(() => ctx.locale.register(NS, { en: EN, zh: ZH }), 'python-workspace: copy')
 
-      const store = createStore({
+      /** A fresh panel state: every Sidebar tab owns one of these. */
+      const initialState = () => ({
         root: '',
         rootDraft: '',
         mode: 'session',
@@ -535,6 +536,11 @@ window.__ModuleLoader__.load({
         notice: '',
         busy: '',
       })
+
+      /** One saved state per tab id, so several Coding workspaces stay independent. */
+      const tabStates = new Map()
+
+      const store = createStore(initialState())
 
       /** Call the Host half and surface its failure text. */
       async function api(pathname, init) {
@@ -807,9 +813,22 @@ window.__ModuleLoader__.load({
 
       /** The tab body: toolbar, file tree, editor, and run output. */
       function PythonWorkspace(props) {
-        const [state, setState] = React.useState(store.get())
+        // Each tab owns a state object; the shared store mirrors the active tab.
+        const tabInfo = props.useTabInfo === undefined ? undefined : props.useTabInfo()
+        const tabId = tabInfo === undefined ? '@single' : tabInfo.tab.id
+        const [state, setState] = React.useState(() => {
+          const saved = tabStates.get(tabId)
+          const next = saved === undefined ? initialState() : saved
+          tabStates.set(tabId, next)
+          store.set(next)
+          return next
+        })
         const [draft, setDraft] = React.useState('')
-        React.useEffect(() => store.subscribe(() => setState(store.get())), [])
+        React.useEffect(() => store.subscribe(() => {
+          const snapshot = store.get()
+          tabStates.set(tabId, snapshot)
+          setState(snapshot)
+        }), [tabId])
 
         // The Session's own directory is the default root: it is the folder the
         // conversation works in, so the panel shows the same project.
@@ -862,6 +881,14 @@ window.__ModuleLoader__.load({
         const fitRef = React.useRef(null)
         const ptyState = React.useRef({ id: null, since: 0, root: '', shell: '' })
         const shellTask = React.useRef(null)
+
+        // A restored tab keeps running its own shell; adopt that terminal when
+        // the body mounts again instead of spawning a second one.
+        React.useEffect(() => {
+          if (state.ptyId !== null && ptyState.current.id !== state.ptyId) {
+            ptyState.current = { id: state.ptyId, since: 0, root: state.root, shell: '' }
+          }
+        }, [])
         const [termReady, setTermReady] = React.useState(false)
         const [menu, setMenu] = React.useState(null)
         React.useEffect(() => {
@@ -1025,7 +1052,7 @@ window.__ModuleLoader__.load({
               method: 'POST',
               body: JSON.stringify({
                 termId,
-                shell: ptyState.current.shell,
+                shell: ptyState.current.shell || undefined,
                 root: snapshot.root,
                 path: target.path,
                 interpreter: snapshot.interpreter,
@@ -1254,6 +1281,9 @@ window.__ModuleLoader__.load({
       ctx.effect(() => ctx.sidebarRightTabs.register({
         id: TAB_ID,
         kind: TAB_KIND,
+        // Each open is its own workspace: a guide-card click always creates a
+        // new tab instead of revealing the first one.
+        multiple: true,
         title: () => t('title'),
         guide: [{
           id: 'open',
