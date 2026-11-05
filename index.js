@@ -121,11 +121,14 @@ function systemPython() {
   if (systemPythonCache !== undefined) return systemPythonCache
   systemPythonCache = null
   for (const candidate of interpreterCandidates()) {
-    const probe = spawnSync(candidate.exe, [...candidate.args, '-c', 'import sys;print(sys.version_info[0])'], {
+    // The probe prints the interpreter's own path, so the resolved value is an
+    // absolute executable and not just the name that happened to be on PATH.
+    const probe = spawnSync(candidate.exe, [...candidate.args, '-c', 'import sys;print(sys.version_info[0]);print(sys.executable)'], {
       encoding: 'utf8', timeout: 8000, windowsHide: true,
     })
-    if (probe.status === 0 && String(probe.stdout).trim() === '3') {
-      systemPythonCache = { exe: candidate.exe, args: candidate.args }
+    const [major = '', executable = ''] = String(probe.stdout).trim().split(/\r?\n/)
+    if (probe.status === 0 && major === '3') {
+      systemPythonCache = { exe: executable.trim() === '' ? candidate.exe : executable.trim(), args: [] }
       return systemPythonCache
     }
   }
@@ -148,6 +151,13 @@ function venvPython(root) {
  * @returns the interpreter argv prefix.
  */
 function interpreterFor(root, mode) {
+  // Anything that is not one of the three modes is an explicit interpreter
+  // path the user picked, absolute or relative to the opened folder.
+  if (typeof mode === 'string' && mode !== 'auto' && mode !== 'venv' && mode !== 'system' && mode.trim() !== '') {
+    const candidate = path.isAbsolute(mode) ? mode : resolveInside(root, mode)
+    if (!existsSync(candidate)) throw fail(400, 'python-missing', 'no interpreter at ' + mode)
+    return { exe: candidate, args: [] }
+  }
   if (mode === 'venv') {
     const found = venvPython(root)
     if (found === undefined) throw fail(400, 'venv-missing', 'this folder has no .venv yet')

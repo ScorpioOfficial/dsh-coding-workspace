@@ -369,6 +369,9 @@ window.__ModuleLoader__.load({
       run: 'Run',
       stop: 'Stop',
       interpreter: 'Interpreter',
+      terminal: 'Terminal',
+      custom: 'Custom path…',
+      use: 'Use',
       auto: 'Auto',
       venv: 'Venv',
       system: 'System',
@@ -407,6 +410,9 @@ window.__ModuleLoader__.load({
       run: '运行',
       stop: '停止',
       interpreter: '解释器',
+      terminal: '终端',
+      custom: '自定义路径…',
+      use: '使用',
       auto: '自动',
       venv: '虚拟环境',
       system: '系统',
@@ -533,6 +539,35 @@ window.__ModuleLoader__.load({
       select: {
         height: 22, borderRadius: 5, border: `1px solid ${token('border-l1')}`, background: token('bg-layer-1'),
         color: token('label-primary'), fontSize: 11.5, fontFamily: 'inherit',
+      },
+      pickerPanel: {
+        position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 40, width: 330, padding: 6,
+        background: token('bg-overlay'), border: `1px solid ${token('border-l1')}`, borderRadius: 8,
+        boxShadow: '0 12px 32px rgba(0,0,0,.34)',
+      },
+      pickerRow: {
+        display: 'flex', flexDirection: 'column', gap: 1, width: '100%', textAlign: 'left',
+        padding: '6px 8px', border: 'none', background: 'transparent', color: token('label-primary'),
+        fontSize: 12, cursor: 'pointer', borderRadius: 5, fontFamily: 'inherit',
+      },
+      pickerRowActive: {
+        display: 'flex', flexDirection: 'column', gap: 1, width: '100%', textAlign: 'left',
+        padding: '6px 8px', border: 'none',
+        background: 'color-mix(in srgb, var(--dsw-alias-brand-primary) 22%, transparent)',
+        color: token('label-primary'), fontSize: 12, cursor: 'pointer', borderRadius: 5, fontFamily: 'inherit',
+      },
+      pickerPath: {
+        color: token('label-tertiary'), fontSize: 10.5, fontFamily: mono,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 300,
+      },
+      statusBar: {
+        display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px', height: 24, flex: '0 0 auto',
+        borderTop: `1px solid ${token('border-l1')}`, background: token('bg-layer-2'),
+        fontSize: 11,
+      },
+      statusPath: {
+        color: token('label-tertiary'), fontFamily: mono, fontSize: 10.5,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%',
       },
       input: {
         height: 22, flex: '1 1 84px', minWidth: 84, borderRadius: 5, padding: '0 6px', boxSizing: 'border-box',
@@ -873,6 +908,8 @@ window.__ModuleLoader__.load({
         notice: '',
         busy: '',
         selected: '',
+        termCollapsed: false,
+        interpreterPath: '',
       })
 
       /** One saved state per tab id, so several Coding workspaces stay independent. */
@@ -1172,6 +1209,45 @@ window.__ModuleLoader__.load({
           return next
         })
         const [draft, setDraft] = React.useState('')
+        const [pickerOpen, setPickerOpen] = React.useState(false)
+        const [customDraft, setCustomDraft] = React.useState('')
+        const pickerRef = React.useRef(null)
+
+        // The three modes resolve through /api/env; anything else is a path.
+        const isMode = mode => mode === 'auto' || mode === 'venv' || mode === 'system'
+        const resolvedPython = isMode(state.interpreter)
+          ? (state.interpreter === 'venv'
+            ? state.env?.venv ?? ''
+            : state.interpreter === 'system'
+              ? state.env?.system ?? ''
+              : state.env?.venv ?? state.env?.system ?? '')
+          : state.interpreter
+        const modeLabel = (mode) => {
+          if (mode === 'auto') return t('auto')
+          if (mode === 'venv') return t('venv')
+          if (mode === 'system') return t('system')
+          const base = String(mode).split(/[\\/]/).pop()
+          return base === undefined || base === '' ? t('custom') : base
+        }
+        const pickRow = (mode, label, detail) => h('button', {
+          type: 'button',
+          key: mode,
+          className: 'pw-pick',
+          onClick: () => { store.set({ interpreter: mode, interpreterPath: '' }); setPickerOpen(false) },
+          style: state.interpreter === mode ? styles.pickerRowActive : styles.pickerRow,
+        },
+        h('span', null, label),
+        h('span', { style: styles.pickerPath, title: String(detail) }, String(detail)))
+
+        React.useEffect(() => {
+          if (!pickerOpen) return undefined
+          const close = (event) => {
+            if (pickerRef.current?.contains(event.target) === true) return
+            setPickerOpen(false)
+          }
+          document.addEventListener('pointerdown', close)
+          return () => document.removeEventListener('pointerdown', close)
+        }, [pickerOpen])
         React.useEffect(() => store.subscribe(() => {
           const snapshot = store.get()
           tabStates.set(tabId, snapshot)
@@ -1524,15 +1600,46 @@ window.__ModuleLoader__.load({
               onChange: event => store.set({ rootDraft: event.target.value }),
               onKeyDown: event => { if (event.key === 'Enter') void openRoot(event.currentTarget.value) },
             }),
-            h('select', {
-              style: styles.select,
-              value: state.interpreter,
-              title: t('interpreter'),
-              onChange: event => store.set({ interpreter: event.target.value }),
-            },
-            h('option', { value: 'auto' }, state.env?.venv ? `${t('auto')} (${t('venv')})` : t('auto')),
-            h('option', { value: 'venv' }, t('venv')),
-            h('option', { value: 'system' }, `${t('system')}${state.env?.system ? '' : ` (${t('noPython')})`}`)),
+            h('div', { ref: pickerRef, style: { position: 'relative', flex: '0 0 auto' } },
+              h(Button, {
+                label: `${modeLabel(state.interpreter)} ▾`,
+                title: resolvedPython === '' ? t('interpreter') : resolvedPython,
+                onClick: () => setPickerOpen(open => !open),
+              }),
+              pickerOpen
+                ? h('div', { style: styles.pickerPanel, onMouseDown: event => event.stopPropagation() },
+                  h('style', null, '.pw-pick:hover{background:var(--dsw-alias-bg-layer-2)!important}'),
+                  pickRow('auto', `${t('auto')}`, state.env?.venv ?? state.env?.system ?? t('noPython')),
+                  pickRow('venv', t('venv'), state.env?.venv ?? t('noPython')),
+                  pickRow('system', t('system'), state.env?.system ?? t('noPython')),
+                  h('div', { style: { display: 'flex', gap: 4, padding: '4px 4px 2px', borderTop: `1px solid ${token('border-l1')}`, marginTop: 4 } },
+                    h('input', {
+                      style: { ...styles.input, flex: '1 1 auto', height: 22, fontSize: 11, fontFamily: mono },
+                      value: customDraft,
+                      placeholder: t('custom'),
+                      spellCheck: false,
+                      onChange: event => setCustomDraft(event.target.value),
+                      onKeyDown: event => {
+                        if (event.key !== 'Enter') return
+                        event.preventDefault()
+                        const picked = event.currentTarget.value.trim()
+                        if (picked === '') return
+                        store.set({ interpreter: picked, interpreterPath: picked })
+                        setCustomDraft('')
+                        setPickerOpen(false)
+                      },
+                    }),
+                    h(Button, {
+                      label: t('use'),
+                      onClick: () => {
+                        const picked = customDraft.trim()
+                        if (picked === '') return
+                        store.set({ interpreter: picked, interpreterPath: picked })
+                        setCustomDraft('')
+                        setPickerOpen(false)
+                      },
+                    })))
+                : null),
             h(Button, {
               label: dirty ? `${t('save')} •` : t('save'),
               onClick: () => { void saveFile() },
@@ -1646,7 +1753,7 @@ window.__ModuleLoader__.load({
                   }, `${t('exit')} ${state.exitCode}`)
                   : null,
                 h(Button, { label: t('clear'), onClick: () => store.set({ output: '', echoes: [], exitCode: null, command: '' }) })),
-              h('div', { style: styles.console },
+              h('div', { style: { ...styles.console, display: state.termCollapsed ? 'none' : 'flex' } },
                 h('style', null, CONSOLE_CSS),
                 state.command === '' ? null : h('div', { style: styles.consoleCommand, title: state.command }, state.command),
                 h('div', { ref: termHostRef, style: { ...styles.termHost, display: termReady && !state.fallback ? 'block' : 'none' } }),
@@ -1671,7 +1778,15 @@ window.__ModuleLoader__.load({
                         setDraft('')
                         void sendInput(line)
                       },
-                    }))))))
+                    }))))),
+            h('div', { style: styles.statusBar },
+              h(Button, {
+                label: state.termCollapsed ? `▸ ${t('terminal')}` : `▾ ${t('terminal')}`,
+                title: t('terminal'),
+                onClick: () => store.set({ termCollapsed: !state.termCollapsed }),
+              }),
+              h('span', { style: { flex: '1 1 auto' } }),
+              h('span', { style: styles.statusPath, title: resolvedPython }, resolvedPython === '' ? t('noPython') : resolvedPython)))
       }
 
       ctx.effect(() => ctx.sidebarRightTabs.register({
