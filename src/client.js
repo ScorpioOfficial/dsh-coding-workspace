@@ -803,7 +803,7 @@ window.__ModuleLoader__.load({
               store.set({ selected: entry.path })
               void (entry.dir ? toggleDirectory(entry) : openFile(entry))
             },
-            onContextMenu: event => onMenu(event, entry.dir ? entry.path : (entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : '')),
+            onContextMenu: event => onMenu(event, entry.path, entry.dir),
           },
           h('span', { style: { ...styles.muted, width: 10, flex: '0 0 10px' } }, entry.dir ? (open ? '▾' : '▸') : ''),
           h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, entry.name),
@@ -1113,12 +1113,28 @@ window.__ModuleLoader__.load({
           store.set({ ptyId: null, running: false, busy: '' })
           try { await api('/pty/close', { method: 'POST', body: JSON.stringify({ termId: id }) }) } catch { /* gone */ }
         }
-        const openMenu = (event, dir) => {
+        /**
+         * Open the tree menu for one row (or the empty background).
+         * @param event - the contextmenu event.
+         * @param target - the clicked entry's path, or `null` on the background.
+         * @param isDir - whether that entry is a folder.
+         */
+        const openMenu = (event, target, isDir) => {
           if (event.target?.closest?.('input,textarea') !== null) return
           event.preventDefault()
           event.stopPropagation()
           const rect = columnRef.current?.getBoundingClientRect()
-          setMenu({ dir, y: rect === undefined ? 8 : Math.max(4, event.clientY - rect.top) })
+          // Creation lands in the clicked folder, or the folder holding the file;
+          // deletion always names the clicked entry itself.
+          const dir = target === null
+            ? ''
+            : isDir === true ? target : (target.includes('/') ? target.slice(0, target.lastIndexOf('/')) : '')
+          setMenu({
+            dir,
+            target,
+            isDir: isDir === true,
+            y: rect === undefined ? 8 : Math.max(4, event.clientY - rect.top),
+          })
         }
         const menuItem = (label, onClick, danger) => h('button', {
           type: 'button',
@@ -1133,12 +1149,15 @@ window.__ModuleLoader__.load({
           },
         }, label)
 
-        /** Delete the menu's target, then refresh its parent and drop stale state. */
-        async function removeEntry(target) {
+        /** Delete the clicked entry (never its parent), then refresh that parent. */
+        async function removeEntry(target, isDir) {
           const parent = target.includes('/') ? target.slice(0, target.lastIndexOf('/')) : ''
           setMenu(null)
           try {
-            await api('/delete', { method: 'POST', body: JSON.stringify({ root: store.get().root, path: target }) })
+            await api('/delete', {
+              method: 'POST',
+              body: JSON.stringify({ root: store.get().root, path: target, recursive: isDir === true }),
+            })
             const snapshot = store.get()
             const open = snapshot.current
             if (open !== null && (open.path === target || open.path.startsWith(`${target}/`))) {
@@ -1215,7 +1234,7 @@ window.__ModuleLoader__.load({
               h('div', {
                 ref: treeRef,
                 style: styles.tree,
-                onContextMenu: event => openMenu(event, ''),
+                onContextMenu: event => openMenu(event, null, false),
               },
               treeBody),
               menu === null ? null : h('div', {
@@ -1229,7 +1248,7 @@ window.__ModuleLoader__.load({
               },
               menu.confirming === true
                 ? h(React.Fragment, null,
-                  menuItem(t('confirmDelete'), () => { void removeEntry(menu.dir) }, true),
+                  menuItem(t('confirmDelete'), () => { void removeEntry(menu.target, menu.isDir) }, true),
                   menuItem(t('cancel'), () => setMenu({ ...menu, confirming: false })))
                 : h(React.Fragment, null,
                   menuItem(t('newFile'), () => { beginCreate(menu.dir, 'file'); setMenu(null) }),
@@ -1238,7 +1257,9 @@ window.__ModuleLoader__.load({
                     loadDirectory(menu.dir).catch(error => store.set({ notice: error.message }))
                     setMenu(null)
                   }),
-                  menuItem(t('delete'), () => setMenu({ ...menu, confirming: true }), true)))),
+                  menu.target === null
+                    ? null
+                    : menuItem(t('delete'), () => setMenu({ ...menu, confirming: true }), true)))),
             h('div', { style: styles.editorPane },
               h('div', { style: styles.paneHead },
                 h('span', {

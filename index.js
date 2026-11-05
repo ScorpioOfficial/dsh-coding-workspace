@@ -466,13 +466,15 @@ export function apply(ctx) {
         const rel = String(body.path ?? '')
         if (rel === '') throw fail(400, 'root-protected', 'the opened folder itself cannot be deleted')
         const target = resolveInside(body.root, rel)
-        try {
-          await fs.rm(target, { recursive: true, force: false })
-        } catch (error) {
-          if (error.code === 'ENOENT') throw fail(404, 'missing', 'that file or folder is gone')
-          throw error
+        const info = await fs.stat(target).catch(() => undefined)
+        if (info === undefined) throw fail(404, 'missing', 'that file or folder is gone')
+        // A folder is only removed when the caller says so; a mistargeted delete
+        // must never take a tree with it.
+        if (info.isDirectory() && body.recursive !== true) {
+          throw fail(400, 'recursive-required', 'deleting a folder needs recursive: true')
         }
-        sendJson(res, 200, { ok: true, path: wirePath(body.root, target) })
+        await fs.rm(target, { recursive: info.isDirectory(), force: false })
+        sendJson(res, 200, { ok: true, path: wirePath(body.root, target), dir: info.isDirectory() })
         return
       }
       if (suffix === 'api/mkfile' || suffix === 'api/mkdir') {
