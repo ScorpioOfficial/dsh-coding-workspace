@@ -348,7 +348,7 @@ window.__ModuleLoader__.load({
     /** Copy for the panel; the panel owns every visible string. */
     const EN = {
       title: 'Coding',
-      entry: 'twin-coding',
+      entry: 'Coding workspace',
       entryHint: 'Open the Coding workspace beside the chat',
       guideTitle: 'Coding workspace',
       guideDescription: 'Open a folder, edit files, and run Python.',
@@ -391,7 +391,7 @@ window.__ModuleLoader__.load({
     }
     const ZH = {
       title: 'Coding',
-      entry: 'twin-coding',
+      entry: 'Coding 工作区',
       entryHint: '在对话右侧打开 Coding 工作区',
       guideTitle: 'Coding 工作区',
       guideDescription: '打开文件夹、编辑文件并运行 Python。',
