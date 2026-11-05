@@ -4,6 +4,8 @@
 
 一个 DSH bundle 插件，Host 半 + Client 半，零外部服务依赖。
 
+> **适用范围**：目前只在 **Python** 项目上测试过。运行、解释器选择、`.venv`、语法高亮都是围绕 Python 做的；其它语言的文件可以浏览编辑，但「运行」固定用 Python 解释器，效果未验证。
+
 ![在对话右侧打开 Coding 工作区：文件树、编辑器、内嵌真终端与状态条](docs/panel.jpg)
 
 ![右侧栏「开始」页里的 Coding 工作区入口](docs/entry.jpg)
@@ -157,6 +159,7 @@ dsh-coding-workspace/
 
 ## 已知限制
 
+- **只在 Python 项目上验证过**：运行、解释器选择、venv、语法高亮都是围绕 Python 做的。其它语言的文件可以浏览/编辑/新建，但**运行按钮固定用 Python 解释器执行**，能不能跑、跑出来对不对，未经验证
 - **shell 是 `cmd.exe`**（宿主未报告默认 shell）；想换 PowerShell 改 `index.js` 的 `shellFor()`（`pwsh.exe` → `powershell.exe` → `cmd.exe`）
 - 编辑器是"高亮叠加层"，不是完整 IDE：没有补全、多光标、折叠、跳转定义
 - 语法高亮是正则分词：`getattr(obj,"x")`、f-string 内的表达式等分不出来
