@@ -398,13 +398,21 @@ async function startPty(ctx, ptys, request) {
  * @param ctx - Host context providing `webServer`.
  */
 export function apply(ctx) {
-  const connection = ctx.get('connection')
   const runs = new Map()
   const ptys = new Map()
 
   const route = async (req, res) => {
     try {
-      if (connection !== undefined) {
+      // Resolved per request: the connection carrier may mount after this
+      // plugin, and a captured `undefined` would leave the API unauthenticated.
+      // No carrier means no way to authenticate, so fail closed.
+      const connection = ctx.get('connection')
+      if (connection === undefined) {
+        res.statusCode = 403
+        res.end()
+        return
+      }
+      {
         const rejection = connection.requestRejection(req)
         if (rejection !== undefined) {
           res.statusCode = rejection
