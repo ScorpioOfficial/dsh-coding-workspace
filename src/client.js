@@ -17,12 +17,15 @@ window.__ModuleLoader__.load({
     const TAB_ID = '@local/python-workspace'
     const TAB_KIND = 'pythonStudio'
     const NS = 'pythonStudio'
+
+    /** Owner avatar, 64x64 JPEG as a data URL: inlined so no extra route or asset is needed. */
+    const AVATAR = 'data:image/jpeg;base64,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'
     const API = '/python-workspace/api'
 
     /** Copy for the panel; the panel owns every visible string. */
     const EN = {
       title: 'Python',
-      entry: 'Python',
+      entry: 'twin-coding',
       entryHint: 'Open the Python workspace beside the chat',
       guideTitle: 'Python workspace',
       guideDescription: 'Open a folder, edit files, and run Python.',
@@ -58,7 +61,7 @@ window.__ModuleLoader__.load({
     }
     const ZH = {
       title: 'Python',
-      entry: 'Python',
+      entry: 'twin-coding',
       entryHint: '在对话右侧打开 Python 工作区',
       guideTitle: 'Python 工作区',
       guideDescription: '打开文件夹、编辑文件并运行 Python。',
@@ -210,10 +213,20 @@ window.__ModuleLoader__.load({
       },
       notice: { padding: '2px 8px 4px', fontSize: 11, color: token('state-error-primary') },
       entryButton: {
-        display: 'inline-flex', alignItems: 'center', gap: 4, height: 24, padding: '0 8px',
-        borderRadius: 6, border: 'none', background: 'transparent',
-        color: token('label-secondary'), fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+        display: 'inline-flex', alignItems: 'center', gap: 6, height: 26, padding: '0 8px 0 4px',
+        borderRadius: 7, border: `1px solid ${token('border-l1')}`, background: token('bg-layer-1'),
+        color: token('label-primary'), fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+        flex: '0 0 auto', boxSizing: 'border-box',
       },
+      entryAvatar: {
+        width: 20, height: 20, borderRadius: 5, objectFit: 'cover', display: 'block', flex: '0 0 auto',
+      },
+      entryAvatarFallback: {
+        width: 20, height: 20, borderRadius: 5, display: 'inline-flex', alignItems: 'center',
+        justifyContent: 'center', fontSize: 11, fontWeight: 600, color: '#ffffff',
+        background: token('brand-primary'), flex: '0 0 auto',
+      },
+      entryLabel: { whiteSpace: 'nowrap', flex: '0 0 auto' },
       entryStyle: '.pw-head-entry:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}',
       runButton: {
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 22,
@@ -768,7 +781,7 @@ window.__ModuleLoader__.load({
         }
       }
 
-      /** Header entry: one click opens the workspace beside the chat. */
+      /** Header entry: the owner's avatar plus the product name, sized to its content. */
       function HeaderEntry() {
         const open = (event) => {
           // Expand first: a collapsed column has no pane for the open to land in.
@@ -786,8 +799,10 @@ window.__ModuleLoader__.load({
             onClick: open,
             style: styles.entryButton,
           },
-          h(PythonIcon, { size: 14 }),
-          h('span', null, t('entry'))))
+          AVATAR === ''
+            ? h('span', { style: styles.entryAvatarFallback }, 'T')
+            : h('img', { src: AVATAR, alt: '', draggable: false, style: styles.entryAvatar }),
+          h('span', { style: styles.entryLabel }, t('entry'))))
       }
 
       /** The tab body: toolbar, file tree, editor, and run output. */
