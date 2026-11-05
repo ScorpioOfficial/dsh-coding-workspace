@@ -206,8 +206,16 @@ async function readFileText(root, rel) {
   if (stat.isDirectory()) throw fail(400, 'is-directory', 'this path is a folder')
   if (stat.size > MAX_BODY_BYTES) throw fail(413, 'file-too-large', 'this file is too large to edit here')
   const bytes = await fs.readFile(abs)
-  if (bytes.subarray(0, 8000).includes(0)) throw fail(415, 'binary-file', 'this file is not UTF-8 text')
-  return { path: wirePath(root, abs), content: bytes.toString('utf8'), size: stat.size }
+  // A NUL anywhere means binary; a strict decode also catches image/video data
+  // whose bytes happen to be NUL-free. Either way the editor never sees it.
+  if (bytes.includes(0)) throw fail(415, 'binary-file', 'this file is not UTF-8 text')
+  let text
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    throw fail(415, 'binary-file', 'this file is not UTF-8 text')
+  }
+  return { path: wirePath(root, abs), content: text, size: stat.size }
 }
 
 /** Create one managed run and start its process. */

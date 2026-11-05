@@ -383,6 +383,8 @@ window.__ModuleLoader__.load({
       stdinHint: 'Send a line to the running process (Enter)',
       clear: 'Clear',
       resize: 'Drag to resize',
+      binaryFile: 'This is not a text file; it cannot be opened here.',
+      fileTooLarge: 'This file is too large to edit here.',
       unsaved: 'Unsaved changes',
       running: 'Running…',
       exit: 'Exit',
@@ -426,6 +428,8 @@ window.__ModuleLoader__.load({
       stdinHint: '给运行中的进程发一行（回车发送）',
       clear: '清空',
       resize: '拖动调整大小',
+      binaryFile: '这不是文本文件，无法在这里打开。',
+      fileTooLarge: '文件太大，不适合在内嵌编辑器里打开。',
       unsaved: '有未保存的修改',
       running: '运行中…',
       exit: '退出码',
@@ -737,6 +741,8 @@ window.__ModuleLoader__.load({
      */
     function highlightPython(source) {
       if (source === '') return ['']
+      // A multi-hundred-kilobyte buffer is not code worth tokenizing.
+      if (source.length > 200000) return [source]
       const out = []
       let last = 0
       let previousWord = ''
@@ -954,7 +960,11 @@ window.__ModuleLoader__.load({
         const text = await response.text()
         let data = {}
         try { data = text === '' ? {} : JSON.parse(text) } catch { throw new Error(text.slice(0, 200) || response.statusText) }
-        if (!response.ok) throw new Error(data.message ?? data.code ?? response.statusText)
+        if (!response.ok) {
+          const error = new Error(data.message ?? data.code ?? response.statusText)
+          error.code = data.code
+          throw error
+        }
         return data
       }
 
@@ -1019,9 +1029,17 @@ window.__ModuleLoader__.load({
       async function openFile(entry) {
         try {
           const data = await api(`/read?root=${encodeURIComponent(store.get().root)}&path=${encodeURIComponent(entry.path)}`)
+          if (String(data.content).length > 2000000) {
+            store.set({ notice: t('fileTooLarge') })
+            return
+          }
           store.set({ current: { path: data.path, content: data.content, saved: data.content }, notice: '' })
         } catch (error) {
-          store.set({ notice: error.message })
+          store.set({
+            notice: error.code === 'binary-file'
+              ? t('binaryFile')
+              : error.code === 'file-too-large' ? t('fileTooLarge') : error.message,
+          })
         }
       }
 
@@ -1698,6 +1716,7 @@ window.__ModuleLoader__.load({
         const editorSource = current === null ? '' : current.content
         // One gutter row per editor line; wrapping is off, so the counts match.
         const gutterLineCount = current === null ? 0 : editorSource.split('\n').length
+        const showGutter = gutterLineCount > 0 && gutterLineCount <= 20000
         const gutterText = current === null
           ? ''
           : Array.from({ length: gutterLineCount }, (_, index) => String(index + 1)).join('\n')
@@ -1836,7 +1855,7 @@ window.__ModuleLoader__.load({
                 }, current === null ? t('title') : current.path),
                 h('span', { style: styles.muted }, dirty ? t('unsaved') : '')),
               h('div', { style: styles.editorArea },
-                gutterLineCount === 0
+                showGutter === false
                   ? null
                   : h('div', {
                     ref: gutterRef,
