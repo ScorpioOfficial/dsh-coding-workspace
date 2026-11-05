@@ -616,8 +616,10 @@ window.__ModuleLoader__.load({
 
     /** Panel-level hover feedback shared by the toolbar buttons and the tree menu. */
     const PANEL_CSS = [
-      '.pw-btn:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-border-l2)}',
-      '.pw-menu-item:hover{background:color-mix(in srgb, var(--dsw-alias-brand-primary) 22%, transparent);color:var(--dsw-alias-label-primary)}',
+      // Inline styles carry the resting look, so hover has to win explicitly.
+      '.pw-btn:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2)!important;border-color:var(--dsw-alias-border-l2)!important}',
+      '.pw-menu-item:hover{background:color-mix(in srgb, var(--dsw-alias-brand-primary) 26%, transparent)!important;color:var(--dsw-alias-label-primary)!important}',
+      '.pw-menu-item:active{background:color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, transparent)!important}',
     ].join('')
 
     /** Colors for the highlight layer: the host's own syntax palette, with
@@ -981,13 +983,15 @@ window.__ModuleLoader__.load({
         if (creating === null) return
         const name = draftName.trim()
         if (name === '') { cancelCreate(); return }
+        // Close the row before awaiting: Enter and the blur it causes must not
+        // both create the same item.
+        store.set({ creating: null, draftName: '' })
         const rel = creating.dir === '' ? name : `${creating.dir}/${name}`
         try {
           await api(creating.kind === 'file' ? '/mkfile' : '/mkdir', {
             method: 'POST',
             body: JSON.stringify({ root, path: rel }),
           })
-          store.set({ creating: null, draftName: '' })
           await loadDirectory(creating.dir)
           if (creating.kind === 'folder') {
             store.set({ expanded: { ...store.get().expanded, [rel]: true } })
@@ -1093,6 +1097,9 @@ window.__ModuleLoader__.load({
               if (event.key === 'Enter') { event.preventDefault(); void commitCreate() }
               else if (event.key === 'Escape') { event.preventDefault(); cancelCreate() }
             },
+            // Clicking anywhere else commits what was typed, so the box never
+            // traps a half-typed name.
+            onBlur: () => { void commitCreate() },
           })))
         }
         if (entries === undefined) return
@@ -1203,6 +1210,7 @@ window.__ModuleLoader__.load({
         // something, and right-clicking is where a file tree puts it. The
         // browser menu is suppressed here on purpose; text fields keep theirs.
         const treeRef = React.useRef(null)
+        const columnRef = React.useRef(null)
         const mirrorRef = React.useRef(null)
         const consoleRef = React.useRef(null)
         const termHostRef = React.useRef(null)
@@ -1420,7 +1428,8 @@ window.__ModuleLoader__.load({
           if (event.target?.closest?.('input,textarea') !== null) return
           event.preventDefault()
           event.stopPropagation()
-          setMenu({ dir })
+          const rect = columnRef.current?.getBoundingClientRect()
+          setMenu({ dir, y: rect === undefined ? 8 : Math.max(4, event.clientY - rect.top) })
         }
         const menuItem = (label, onClick) => h('button', {
           type: 'button',
@@ -1491,7 +1500,7 @@ window.__ModuleLoader__.load({
             })),
           state.notice !== '' ? h('div', { style: styles.notice }, state.notice) : null,
           h('div', { style: styles.main },
-            h('div', { style: styles.treeColumn },
+            h('div', { ref: columnRef, style: styles.treeColumn },
               h('div', {
                 ref: treeRef,
                 style: styles.tree,
@@ -1501,7 +1510,7 @@ window.__ModuleLoader__.load({
               menu === null ? null : h('div', {
                 'data-pw-menu': 'true',
                 style: {
-                  position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+                  position: 'absolute', left: '50%', top: menu.y, transform: 'translateX(-50%)',
                   zIndex: 30, minWidth: 156, padding: 6,
                   background: token('bg-overlay'), border: `1px solid ${token('border-l1')}`, borderRadius: 8,
                   boxShadow: '0 10px 28px rgba(0,0,0,.34)',
@@ -1512,10 +1521,7 @@ window.__ModuleLoader__.load({
               menuItem(t('refresh'), () => {
                 loadDirectory(menu.dir).catch(error => store.set({ notice: error.message }))
                 setMenu(null)
-              })),
-              h('div', { style: styles.treeFoot },
-                h(Button, { label: t('newFile'), onClick: () => beginCreate('', 'file'), disabled: state.root === '' }),
-                h(Button, { label: t('newFolder'), onClick: () => beginCreate('', 'folder'), disabled: state.root === '' }))),
+              }))),
             h('div', { style: styles.editorPane },
               h('div', { style: styles.paneHead },
                 h('span', {
