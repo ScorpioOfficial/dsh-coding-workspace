@@ -1,82 +1,70 @@
-# Python 工作区插件（@local/python-workspace）
+# dsh-coding-workspace
 
-一个装在 DSH Web 页面右侧栏的 Python 工作区：选一个目录 → 浏览文件树 → 编辑 `.py` → 用「系统 Python」或该目录下的 `.venv` 运行，输出显示在下方。
+> 给 [DSH](https://github.com/deepseek-ai/deepseek-harness) Web 界面加一个**右侧栏 Coding 工作区**：打开目录、浏览/编辑/新建/重命名/删除文件、挑 Python 解释器、跑代码，并且带一个**真终端**（PTY + xterm）。
 
-本文件是这次实现的说明书；照着它可以从零复刻，也可以据此改。
+一个 DSH bundle 插件，Host 半 + Client 半，零外部服务依赖。
 
 ---
 
-## 1. 结果
+## 功能
 
-- 位置：右侧边栏 → 「开始 / Start」标签页 → 「Python 工作区」卡片（打开后是一个 tab）
-- 能力：
-  - **默认跟随当前会话的工作目录**（= 会话所在工作区的路径）；点「打开目录」换成别的目录后固定为手动模式，工具栏出现「↺ 会话目录」可一键回到跟随
-  - 打开目录（原生文件夹选择框，或直接粘贴路径回车）
-  - 文件树逐级展开，`.py` 文件带 `py` 标记
-  - 文本编辑（textarea + Ctrl/Cmd+S 保存）
-  - 解释器三选一：自动（有 `.venv` 就用它）/ 虚拟环境 / 系统
-  - 一键 `python -m venv .venv`
-  - 运行当前文件，轮询拿回 stdout+stderr 与退出码，可停止
+### 文件与编辑
 
-## 2. 结构：一个 bundle，两半
+| 功能 | 说明 |
+|---|---|
+| 打开目录 | 原生文件夹选择框，或直接粘贴路径回车 |
+| 跟随会话 | 新开的 tab 默认落在**当前会话的工作目录**（工作区路径），不用每次手动选 |
+| 文件树 | 逐级展开，目录优先排序，`.py` 文件带标记 |
+| 编辑保存 | 内置编辑器，`Ctrl/Cmd+S` 保存；有未保存修改时按钮变 `保存 •` |
+| 语法高亮 | Python 关键字/字符串/数字/注释/装饰器/def 名/调用/属性/模块名，配色取自宿主自带的 shiki 调色板（深浅色主题自动跟随） |
+| 新建 | 右键菜单「+ 文件 / + 目录」，在目标目录顶部就地命名；**回车或点别处即创建**，`Esc` 取消 |
+| 重命名 | 右键「重命名」，就地改名；重名拒绝、根目录不可改、正在编辑的文件改名后路径自动同步 |
+| 删除 | 右键「删除」，**两段式确认**（删除 → 确认删除/取消）；文件直删、目录递归删（Host 要求显式 `recursive`）、根目录不可删 |
+| 刷新 | 右键「刷新」重新读盘（外部改动，例如 Agent 或终端里改了文件之后） |
+| 布局可拖 | 目录列宽度、终端区高度都能拖动调整（悬停高亮、拖动时禁用文本选择） |
+
+### 运行与终端
+
+| 功能 | 说明 |
+|---|---|
+| 解释器选择 | 点工具栏解释器按钮 → 面板列出 **自动 / 虚拟环境 / 系统**（各自显示完整路径）+ **自定义路径**输入 |
+| 一键建 venv | 目标目录没有 `.venv` 时显示「创建 .venv」，执行 `python -m venv .venv` |
+| 真终端 | 底部内嵌 **xterm.js + PTY**：有提示符、能打字、方向键/Tab 补全、`Ctrl+C`、ANSI 颜色、窗口尺寸同步（`vim`/`top` 会正确重排） |
+| 运行 | 绿色箭头把 `python 文件` **敲进终端**执行（按 shell 家族正确加引号：pwsh `& '…'`、cmd `"…"`、bash `'…'`） |
+| 终端开关 | 状态条左侧「终端 ▸/▾」折叠/展开（xterm 与 shell 保持存活，展开不重开进程） |
+| 状态条 | 底部通栏：左侧终端开关，右侧显示**当前解释器绝对路径** |
+
+### 多标签
+
+每个 tab 是一个独立工作区：**各自的目录、打开的文件、终端会话、输出**，互不串台。开始页卡片或标题栏入口每点一次都会新建一个。
+
+---
+
+## 环境要求
+
+- DSH（Web profile）——插件以 bundle 形式安装到 profile
+- Python 3（系统 Python 或目录内的 `.venv`）
+- 宿主需提供终端 provider（`subprocess.spawnTerminal`，DSH 自带 `subprocess-local` 基于 node-pty）
+
+不装 Node/pnpm 也能**直接用**：仓库里已提交构建产物 `client.js`。
+
+---
+
+## 安装
+
+### 方式一：让 DSH 安装本地目录（推荐）
+
+把仓库克隆到任意位置，然后让 DSH 把**这个目录**装进当前 profile：
 
 ```
-python-workspace-plugin/
-├─ package.json         # bundle 清单 + dsh.bundle.patch + dsh.client + 构建依赖
-├─ cordis.patch.yml     # 往 profile 里插入一行插件
-├─ index.js             # Host 半：文件 API、管道运行、真终端（PTY）
-├─ src/client.js        # Client 半源码（xterm 终端 / 文件树 / 编辑器 / 高亮）
-├─ client.js            # 构建产物 = xterm 打包 + src/client.js（勿手改）
-├─ tools/xterm-entry.js # 唯一 import xterm 的地方
-├─ tools/build-client.mjs
-├─ icon.svg             # 插件图标（Plugin Manager 显示）
-└─ locale/{en,zh}.json  # 插件标题与描述
+plugin_manager  install_bundle  target: "<本机 dsh-coding-workspace 目录的绝对路径>"
 ```
 
-Host 半和 Client 半是两个独立加载的产物：
+装完刷新页面。首次安装 Host 半随之生效。
 
-- Host：`index.js` 在 DSH 主进程里跑，`export function apply(ctx)`，能拿 `ctx.webServer`、`node:fs`、`node:child_process`。
-- Client：`client.js` 在浏览器里跑，格式是 `window.__ModuleLoader__.load({ id, factory(require) { ... return { inject, apply } } })`，React 从 `require('react')` 拿，不能 import 任何 `@deepseek-ai/dsh-client-*` 包。
+### 方式二：手动加入 profile
 
-两者之间没有 Remote 命名空间（那需要 typert 生成代码），所以走插件自己的 HTTP 路由——这是无构建的纯 JS 插件最省事的通道。
-
-## 3. 为什么是「右侧栏 tab」而不是别的插槽
-
-`cordis_inspect_query`（Client / Slots）显示右侧栏其实是一个 tab 系统：
-
-- `rightbar` → `rightbar.session` → 两个座位：
-  - `sidebar.right.pane.tab`（keyed，按 tab 类型的 `id` 分发内容）
-  - `sidebar.right.pane.tab.title`（可选，tab 标题）
-- tab 类型本身注册在 Client 服务 `ctx.sidebarRightTabs` 上（`id`/`kind`/`title`/`guide`）。
-
-这正是 VS Code 编辑器组的模型：**先注册类型，再注册该类型的内容渲染器**，两者用同一个 `id` 对上。所以插件只做三件事：
-
-```js
-ctx.sidebarRightTabs.register({ id, kind, title, guide: [card] })   // 类型 + 启动页卡片
-ctx.slots.register({ name: 'sidebar.right.pane.tab', key: id }, Body) // 内容
-```
-
-`guide` 卡片就是「开始」页里那个可点的方块；点它，右侧栏用 `openTab(kind)` 打开 tab。
-
-## 4. 逐步复刻
-
-### 第 1 步：建 bundle 骨架
-
-`package.json` 三段缺一不可：
-
-```json
-"exports": { ".": "./index.js", "./client": "./client.js", "./locale/*.json": "./locale/*.json", "./icon": "./icon.svg" },
-"dsh": {
-  "bundle": { "patch": "./cordis.patch.yml" },
-  "client": { "platform": "web", "immediately": true, "inject": ["@deepseek-ai/dsh-client-ui-sidebar-right", "@deepseek-ai/dsh-client-ui-workspace"] }
-}
-```
-
-- `dsh.bundle.patch`：让这个包成为一个 bundle。
-- `dsh.client`：声明它还有浏览器产物；`immediately` 表示页面启动就加载（不然要等有人打开才加载，插槽就晚了）。
-- `dsh.client.inject`：只排加载顺序，不产生服务依赖。
-
-`cordis.patch.yml` 只有一行插入：
+在 profile 的 `cordis.patch.yml` 里插入一行（与 `cordis.patch.yml` 同目录的 bundle 会自动带出自己的 patch）：
 
 ```yaml
 - insert:
@@ -84,159 +72,100 @@ ctx.slots.register({ name: 'sidebar.right.pane.tab', key: id }, Body) // 内容
       name: '@local/python-workspace'
 ```
 
-### 第 2 步：Host 半——一个带鉴权的 JSON 路由
+> 插件包名目前仍是 `@local/python-workspace`，HTTP 路由前缀为 `/python-workspace`；它们与仓库名不同名，功能不受影响。
 
-`ctx.webServer.register({ kind: 'prefix', path: '/python-workspace', handler })`，handler 是原始 Node `(req, res)`，所以：
+---
 
-- GET 走查询参数，POST 走 JSON body；
-- 每个请求先做 `ctx.get('connection').requestRejection(req)`：校验 Host/Origin 并检查页面自己的登录 Cookie，非本页来源直接 401/403（否则任何网页都能通过 `127.0.0.1` 写你的文件）；
-- 所有相对路径都经 `resolveInside(root, rel)` 解析，逃出所选目录直接 400。
+## 使用
 
-路由清单见 `index.js` 顶部注释。要点：
+1. 打开右侧栏（会话标题行最右端的方框按钮，或 `Ctrl+Shift+B`）
+2. 两种入口，**都是新建一个 tab**：
+   - 右侧栏「开始」页 → **Coding 工作区** 卡片
+   - 会话标题行左侧的 **头像 + Coding 工作区** 按钮
+3. 面板自动落在当前会话目录；要换目录点「打开目录」
+4. 点文件编辑 → 绿色箭头在终端里跑
 
-- **列目录**：`fs.readdir(..., { withFileTypes: true })`，目录优先排序，跳过 `node_modules/.git/__pycache__`。
-- **读文件**：>8MB 或前 8KB 含 NUL 字节（二进制）就拒绝。
-- **写文件**：`mkdir -p` + `writeFile`。
-- **解释器**：`systemPython()` 依次探测 `python` / `py -3` / `python3`（`spawnSync` 验证 `sys.version_info[0] === 3`，结果缓存）；`venvPython(root)` 看 `.venv/Scripts/python.exe`（Windows）或 `.venv/bin/python`。
-- **运行**：`spawn(python, [file], { cwd: 文件所在目录, env: { PYTHONUNBUFFERED: '1' } })`，stdout/stderr 追加进 `runs` Map 里的缓冲区（上限 40 万字符），客户端轮询 `/api/run?runId=` 拿增量快照。
-- **建 venv**：`python -m venv .venv`，把日志一起返回。
-- 所有子进程都在 `ctx.effect` 里挂清理，插件卸载时整批 kill。
+### 常用交互
 
-### 第 3 步：Client 半——注册 tab 类型与内容
+| 操作 | 结果 |
+|---|---|
+| 左键点文件 | 打开并高亮该行 |
+| 左键点目录 | 展开/收起，并高亮 |
+| 右键文件/目录 | 新建 / 重命名 / 删除 / 刷新（菜单显示在点击高度） |
+| `Ctrl/Cmd+S` | 保存 |
+| `Tab` | 编辑器内插入 4 个空格 |
+| 拖动目录列右缘 / 终端区上缘 | 调整宽度 / 高度 |
 
-```js
-window.__ModuleLoader__.load({
-  id: '@local/python-workspace',
-  factory(require) {
-    const React = require('react')
-    const h = React.createElement
-    function apply(ctx) { /* 注册 */ }
-    return { inject: ['slots', 'locale', 'sidebarRightTabs'], apply }
-  },
-})
-```
+---
 
-- `inject` 里写**服务名**：`sidebarRightTabs` 不 ready 时模块保持 pending，等它出现再 apply。
-- 文案走 `ctx.locale.register(NS, { en, zh })` + `ctx.locale.bind(NS)`。
-- 样式全部用主题 token：`var(--dsw-alias-bg-base)`、`--dsw-alias-border-l1`、`--dsw-alias-label-primary`、`--dsw-alias-brand-primary`、`--dsw-alias-state-success-primary`…… 不写死颜色，浅色/深色都跟主题走。
-- 面板状态放在模块级 store（`createStore`）里，所以关掉 tab 再打开，目录、打开的文件、输出都还在。
-- 运行中的轮询用 `useEffect` 挂在 `[running, runId]` 上，卸载/结束自动清定时器；关掉 tab 再打开会接着轮询同一个 run。
-- 「打开目录」调 `ctx.get('uiWorkspace').pickDirectory()`——那是 DSH 自己的原生目录选择框，返回 Host 绝对路径。
+## 开发
 
-### 第 4 步：先离线验证 Host 半
-
-`.python-workspace-check/host-check.mjs` 用假 `ctx`/假 `req`/`res` 把 `apply` 挂起来，直接打路由：列目录、读、写、越权路径、系统 Python、运行、失败退出码、建 venv 并在 venv 里跑、未鉴权请求 401。
-
-```powershell
-node ..\.python-workspace-check\host-check.mjs <一个临时目录>
-```
-
-（子进程管道捕获在 workspace 沙箱下会 EPERM，需要完整权限跑。）
-
-### 第 5 步：安装并确认真的活了
-
-`plugin_manager install_bundle` 指向这个目录即可（它会做 pnpm 链接、写入 profile bundle 列表）。判断「活没活」只看返回值：
-
-- `application: applied`：Host 行已生效；
-- 再用 `cordis_inspect_query`（Client / Slots，root=`sidebar.right.pane.tab`）确认 occupant 里有 `@local/python-workspace` 且 `active: true`——这说明浏览器里的模块真的加载并注册成功了；
-- 用 `curl` 打 `http://127.0.0.1:3080/python-workspace/api/env` 得 401，说明路由已挂上且鉴权生效。
-
-### 第 6 步：改与卸载
-
-- 改 `client.js` → 刷新页面即可（如果只是这一次安装后的改动，刷新也会带上新文件）。
-- 改 `index.js` → 需要重载 Host 半：重启 `dsh` 或让我重载插件行。
-- 卸载：`plugin_manager remove_bundle`，target 用 `@local/python-workspace`。
-
-## 5. 已知边界
-
-- 编辑器是受控 `<textarea>`，不是 Monaco：没有语法高亮、补全、多文件标签。要这些能力需要引入构建产物（`dsh.client.external` 声明依赖，用部署的 Client 构建工具打包），不再是纯 JS 单文件。
-- 只按「文件」运行，不支持调试、REPL、notebook。
-- 目录选择依赖 `uiWorkspace.pickDirectory()`，在无原生选择框的环境里仍可手动粘贴路径。
-- Host 路由只绑定在 DSH 自己的监听地址上，且逐个请求鉴权；不要把它改成无鉴权的公开端口。
-
-## 6. 构建与生效规则
-
-### 换台电脑 / 从 clone 开始
-
-```powershell
-git clone https://github.com/ScorpioOfficial/dsh-coding-workspace.git
-cd dsh-coding-workspace
-pnpm install          # 或 npm install：装 esbuild + xterm（构建用）
+```bash
+pnpm install          # 只有要重新构建时才需要（esbuild + xterm）
 npm run build         # 重新打包 client.js（xterm + src/client.js）
 ```
 
-然后把整个目录装进 DSH 当前 profile：
+- **客户端改动**：改 `src/client.js` → `npm run build` → 刷新页面（宿主的 client 产物会自动重建）
+- **Host 改动**：改 `index.js` → **重启一次 dsh**（Host 代码不热更）
+- 自测脚本不随仓库发布（本机工作区的 `.python-workspace-check/`）：Host 44 项、分词 21 项、构建产物冒烟
+
+### 目录结构
 
 ```
-plugin_manager  install_bundle  target: "<这个目录的绝对路径>"
+dsh-coding-workspace/
+├─ package.json          # bundle 清单（dsh.bundle.patch / dsh.client）+ 构建依赖
+├─ cordis.patch.yml      # 往 profile 插入插件行
+├─ index.js              # Host 半：文件 API、运行、venv、PTY、shell
+├─ src/client.js         # Client 半源码（改这个）
+├─ client.js             # 构建产物 = xterm bundle + src/client.js（勿手改）
+├─ tools/xterm-entry.js  # 唯一 import xterm 的地方
+├─ tools/build-client.mjs
+├─ locale/{en,zh}.json   # 插件管理页的标题与描述
+└─ icon.svg
 ```
 
-装完 **刷新页面** 即可；如果这次是首次安装，Host 半会随之生效。
+### Host 接口（`/python-workspace` 前缀，全部要求页面自己的登录 Cookie）
 
-### 改代码之后
+| 方法 | 路径 | 作用 |
+|---|---|---|
+| GET | `/api/env?root=` | 系统/venv 解释器路径 |
+| GET | `/api/list?root=&path=` | 列目录 |
+| GET | `/api/read?root=&path=` | 读文本文件（拒绝二进制/过大） |
+| POST | `/api/write` | 写文件 |
+| POST | `/api/mkfile` `/api/mkdir` | 新建文件/目录（重名 409） |
+| POST | `/api/rename` | 重命名（根目录保护、重名 409） |
+| POST | `/api/delete` | 删除（目录需 `recursive:true`） |
+| POST | `/api/venv` | `python -m venv .venv` |
+| POST | `/api/run` + GET `/api/run` + POST `/api/input` | 管道运行、读输出、写 stdin（无 PTY 时的回退路径） |
+| POST | `/api/shell` `/api/shell/run` | 起交互 shell、往 shell 里敲运行命令 |
+| POST/GET | `/api/pty`、`/api/pty/input`、`/api/pty/resize`、`/api/pty/close` | PTY 生命周期与数据面 |
 
-```powershell
-node tools/build-client.mjs   # 或 npm run build：重新打包 client.js
-```
+所有路径都经 `resolveInside(root, rel)` 约束在打开的目录内；跨域/无凭据请求一律 401/403。
 
-- **改 `src/client.js` 之后必须跑一次构建**；`client.js` 是产物，手改会被覆盖。
-- 打包需要 esbuild 子进程，在 DSH 的 workspace 沙箱下会 EPERM，需要完整权限或在工作区外执行。
-- **Client 半热更**：`client.js` 一变，宿主就会重新构建并提供新版本，刷新页面即可。
-- **Host 半不热更**：`hmr.root` 是空数组，`index.js` 的改动要**重启一次 dsh** 才生效（会话本身会保留）。
-- 构建依赖：`esbuild`、`@xterm/xterm`、`@xterm/addon-fit`，装在本包自己的 `node_modules` 里（不进 profile，也不提交）。
-  `esbuild` 的平台二进制来自它的可选依赖，锁文件里已含 win32/darwin/linux 各平台，换机器 `pnpm install` 即可。
+---
 
-## 7. 仓库、安装位置与继续开发
+## 已知限制
 
-**这个仓库就是插件的唯一源码**（根目录即插件目录），克隆下来即可：
+- **shell 是 `cmd.exe`**（宿主未报告默认 shell）；想换 PowerShell 改 `index.js` 的 `shellFor()`（`pwsh.exe` → `powershell.exe` → `cmd.exe`）
+- 编辑器是"高亮叠加层"，不是完整 IDE：没有补全、多光标、折叠、跳转定义
+- 语法高亮是正则分词：`getattr(obj,"x")`、f-string 内的表达式等分不出来
+- 删除是**物理删除**，不进回收站
+- 目录/终端尺寸只按 tab 保存，重启后回默认值
+- 仅测过 Windows（venv 路径、shell 选择、命令引号都做了 POSIX 分支，但未实测）
 
-```powershell
-git clone https://github.com/ScorpioOfficial/dsh-coding-workspace.git
-cd dsh-coding-workspace
-pnpm install        # 只有要重新构建 client.js 时才需要
-```
+---
 
-提交清单（14 个文件，约 550 KB）：
+## 故障排查
 
-| 文件 | 说明 |
+| 现象 | 原因 / 处理 |
 |---|---|
-| `package.json`、`cordis.patch.yml` | bundle 清单与插入行 |
-| `index.js` | Host 半（文件 API、运行、venv、PTY、shell） |
-| `src/client.js` | Client 半**源码**（改这个） |
-| `client.js` | 构建产物（已提交，不构建也能直接用） |
-| `tools/xterm-entry.js`、`tools/build-client.mjs` | 打包脚本 |
-| `locale/*.json`、`icon.svg`、`README.md`、`.gitignore`、`.gitattributes` | 资源与文档 |
-| `pnpm-lock.yaml` | 构建依赖锁（含各平台二进制） |
+| 面板空白、右侧栏提示"这类内容还没有可用的查看方式" | 客户端模块没加载。检查 `package.json` **不能有 UTF-8 BOM**，然后刷新；再不行重启 dsh |
+| `no route POST /python-workspace/api/...` | Host 半还是旧代码，**重启一次 dsh** |
+| 终端没有提示符、打字没反应 | `/api/shell` 未生效（同上）或宿主没有终端 provider |
+| 换目录后弹 `that terminal is gone` 红字 | 旧版本竞态，已修复；若仍有，刷新即可 |
 
-不提交：`node_modules/`、`.build/`（已在 `.gitignore`）。
+---
 
-### 安装位置是每台机器自己的事
+## License
 
-DSH 的 profile 用**绝对路径** link 到插件目录，所以**不要把这个路径写进仓库**，也不要假设别人的路径一样：
-
-```
-<profile>/package.json
-  "@local/python-workspace": "link:<你本机 clone 下来的目录>"
-```
-
-换机器 / 搬家后，在新机器上重装一次即可：
-
-```
-plugin_manager  remove_bundle   target: "@local/python-workspace"
-plugin_manager  install_bundle  target: "<本机插件目录的绝对路径>"
-```
-
-### 继续开发的检查清单
-
-1. 改 UI → 改 `src/client.js` → `npm run build` → **刷新页面**
-2. 改 Host → 改 `index.js` → **重启 dsh 一次**（Host 代码不热更，`hmr.root: []`）
-3. 自测脚本不随仓库发布（在本机的工作区 `.python-workspace-check/` 里）
-4. 已知待办：shell 目前是 `cmd.exe`，想换 PowerShell 就改 `index.js` 的 `shellFor()`（优先 `pwsh.exe` → `powershell.exe` → `cmd.exe`）
-
-## 8. 想继续加的东西（按代价从小到大）
-
-1. 新建/删除文件（Host 加两个路由，UI 加两个按钮）。
-2. 记住上次打开的目录（`ctx.settings` 或 profile config）。
-3. 给运行加「cwd = 所选根目录」的开关，方便 `python -m` 包内执行。
-4. 语法高亮：换成 `dsh.client.external` + 构建产物的 CodeMirror。
-5. 让 Agent 也能用：把「运行」做成一个 Host 服务方法，同时暴露成 Agent Tool（见 `references/user-actions.md` 的「一次实现，两个调用方」）。
+未指定（若要发布请先选择许可证并补充 `LICENSE`）。
