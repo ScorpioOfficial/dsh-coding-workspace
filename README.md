@@ -4,6 +4,12 @@
 
 一个 DSH bundle 插件，Host 半 + Client 半，零外部服务依赖。
 
+![在对话右侧打开 Coding 工作区：文件树、编辑器、内嵌真终端与状态条](docs/panel.jpg)
+
+![右侧栏「开始」页里的 Coding 工作区入口](docs/entry.jpg)
+
+![插件管理里已安装的 Coding 工作区](docs/installed.jpg)
+
 ---
 
 ## 功能
@@ -52,25 +58,25 @@
 
 ## 安装
 
-### 方式一：让 DSH 安装本地目录（推荐）
+### 推荐：在「添加插件」里粘贴仓库地址
 
-把仓库克隆到任意位置，然后让 DSH 把**这个目录**装进当前 profile：
+在 DSH 的 **插件 → 添加插件** 输入框里粘上仓库地址，点安装即可（已在全新 profile + 公开仓库上验证）：
 
 ```
-plugin_manager  install_bundle  target: "<本机 dsh-coding-workspace 目录的绝对路径>"
+https://github.com/ScorpioOfficial/dsh-coding-workspace.git
 ```
 
-装完刷新页面。首次安装 Host 半随之生效。
+想固定某个版本就带上 tag：
 
-### 方式二：手动加入 profile
-
-在 profile 的 `cordis.patch.yml` 里插入一行（与 `cordis.patch.yml` 同目录的 bundle 会自动带出自己的 patch）：
-
-```yaml
-- insert:
-    - id: coding-workspace
-      name: '@scorpioofficial/coding-workspace'
 ```
+https://github.com/ScorpioOfficial/dsh-coding-workspace.git#v1.3.0
+```
+
+装完**刷新页面**即可；首次安装时 Host 半随之生效。
+
+- 仓库里已提交构建产物 `client.js`（xterm 已打包），安装时**不需要** Node/pnpm 去构建
+- GitHub 安装锁定当时的 commit；以后更新要**卸载后重装**
+- 装完在插件管理里能看到卡片（见本页顶部第二张图）
 
 > 包名 `@scorpioofficial/coding-workspace`，HTTP 路由前缀 `/coding-workspace`。标签类型 id 就是包名，升级到该版本后**旧的标签页会失效**，关掉重开一个即可。
 
@@ -107,6 +113,11 @@ npm run build         # 重新打包 client.js（xterm + src/client.js）
 
 - **客户端改动**：改 `src/client.js` → `npm run build` → 刷新页面（宿主的 client 产物会自动重建）
 - **Host 改动**：改 `index.js` → **重启一次 dsh**（Host 代码不热更）
+- 调试时把自己 clone 下来的目录直接装进 profile（本文档的开发循环就是这样）：
+  ```
+  plugin_manager  install_bundle  target: "<本机目录绝对路径>"
+  ```
+  这样改代码即时生效，不用发版；对外发布用上面的仓库地址安装。
 - 自测脚本不随仓库发布（本机工作区的 `.code-workspace-check/`）：Host 44 项、分词 21 项、构建产物冒烟
 
 ### 目录结构

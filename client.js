@@ -478,7 +478,16 @@ window.__ModuleLoader__.load({
         display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', flex: '0 0 auto',
         borderBottom: `1px solid ${token('border-l1')}`, background: token('bg-layer-2'),
       },
-      editorWrap: { position: 'relative', flex: '1 1 auto', minHeight: 80, overflow: 'hidden', background: token('bg-base') },
+      editorArea: { display: 'flex', flex: '1 1 auto', minHeight: 80, minWidth: 0, overflow: 'hidden', background: token('bg-base') },
+      gutter: {
+        flex: '0 0 auto', overflow: 'hidden', padding: '8px 6px 8px 0', textAlign: 'right',
+        background: token('bg-base'), borderRight: `1px solid ${token('border-l1')}`, userSelect: 'none',
+      },
+      gutterText: {
+        margin: 0, fontFamily: mono, fontSize: 12, lineHeight: 1.5, color: token('label-tertiary'),
+        whiteSpace: 'pre', pointerEvents: 'none',
+      },
+      editorWrap: { position: 'relative', flex: '1 1 auto', minHeight: 80, minWidth: 0, overflow: 'hidden', background: token('bg-base') },
       mirror: {
         position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, margin: 0, padding: 8,
         overflow: 'hidden', pointerEvents: 'none', whiteSpace: 'pre', boxSizing: 'border-box',
@@ -1403,6 +1412,7 @@ window.__ModuleLoader__.load({
         const treeRef = React.useRef(null)
         const columnRef = React.useRef(null)
         const mirrorRef = React.useRef(null)
+        const gutterRef = React.useRef(null)
         const consoleRef = React.useRef(null)
         const termHostRef = React.useRef(null)
         const termRef = React.useRef(null)
@@ -1685,6 +1695,12 @@ window.__ModuleLoader__.load({
         })
         const current = state.current
         const dirty = current !== null && current.content !== current.saved
+        const editorSource = current === null ? '' : current.content
+        // One gutter row per editor line; wrapping is off, so the counts match.
+        const gutterLineCount = current === null ? 0 : editorSource.split('\n').length
+        const gutterText = current === null
+          ? ''
+          : Array.from({ length: gutterLineCount }, (_, index) => String(index + 1)).join('\n')
         const treeBody = state.root === ''
           ? h('div', { style: { ...styles.muted, padding: 8 } }, t('empty'))
           : state.tree[''] === undefined
@@ -1819,7 +1835,16 @@ window.__ModuleLoader__.load({
                   title: current?.path,
                 }, current === null ? t('title') : current.path),
                 h('span', { style: styles.muted }, dirty ? t('unsaved') : '')),
-              h('div', { style: styles.editorWrap },
+              h('div', { style: styles.editorArea },
+                gutterLineCount === 0
+                  ? null
+                  : h('div', {
+                    ref: gutterRef,
+                    style: { ...styles.gutter, width: Math.max(32, String(gutterLineCount).length * 8 + 16) },
+                    'aria-hidden': true,
+                  },
+                  h('pre', { style: styles.gutterText }, gutterText)),
+                h('div', { style: styles.editorWrap },
                 h('style', null, EDITOR_CSS),
                 h('pre', { ref: mirrorRef, style: styles.mirror, 'aria-hidden': true },
                   h('code', { style: { font: 'inherit', color: 'inherit' } },
@@ -1841,9 +1866,12 @@ window.__ModuleLoader__.load({
                   },
                   onScroll: event => {
                     const mirror = mirrorRef.current
-                    if (mirror === null) return
-                    mirror.scrollTop = event.currentTarget.scrollTop
-                    mirror.scrollLeft = event.currentTarget.scrollLeft
+                    if (mirror !== null) {
+                      mirror.scrollTop = event.currentTarget.scrollTop
+                      mirror.scrollLeft = event.currentTarget.scrollLeft
+                    }
+                    const gutter = gutterRef.current
+                    if (gutter !== null) gutter.scrollTop = event.currentTarget.scrollTop
                   },
                   onKeyDown: event => {
                     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
@@ -1862,7 +1890,7 @@ window.__ModuleLoader__.load({
                       requestAnimationFrame(() => { field.selectionStart = field.selectionEnd = start + 4 })
                     }
                   },
-                })),
+                }))),
               state.termCollapsed ? null : h('div', {
                 className: 'pw-handle',
                 style: styles.rowHandle,
