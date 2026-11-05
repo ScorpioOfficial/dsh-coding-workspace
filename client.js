@@ -353,7 +353,6 @@ window.__ModuleLoader__.load({
       guideTitle: 'Coding workspace',
       guideDescription: 'Open a folder, edit files, and run Python.',
       open: 'Open folder',
-      follow: 'Session folder',
       newFile: '+ File',
       newFolder: '+ Folder',
       namePlaceholder: 'New name, then Enter',
@@ -389,7 +388,6 @@ window.__ModuleLoader__.load({
       guideTitle: 'Coding 工作区',
       guideDescription: '打开文件夹、编辑文件并运行 Python。',
       open: '打开目录',
-      follow: '会话目录',
       newFile: '+ 文件',
       newFolder: '+ 目录',
       namePlaceholder: '输入名称后回车',
@@ -451,6 +449,7 @@ window.__ModuleLoader__.load({
       main: { display: 'flex', flex: '1 1 auto', minHeight: 0 },
       treeColumn: {
         width: 176, flex: '0 0 auto', display: 'flex', flexDirection: 'column', minHeight: 0,
+        position: 'relative',
         borderRight: `1px solid ${token('border-l1')}`, background: token('bg-layer-1'),
       },
       tree: { flex: '1 1 auto', overflow: 'auto', padding: '4px 0', position: 'relative', minHeight: 0 },
@@ -562,6 +561,7 @@ window.__ModuleLoader__.load({
       const style = props.primary ? styles.primaryButton : styles.button
       return h('button', {
         type: 'button',
+        className: 'pw-btn',
         title: props.title ?? props.label,
         onClick: props.onClick,
         disabled: props.disabled === true,
@@ -613,6 +613,12 @@ window.__ModuleLoader__.load({
 
     /** One pass over Python source: comment, string, number, decorator, word. */
     const PY_TOKEN = /(#[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')|(\b(?:0[xX][0-9a-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+|\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?[jJ]?)\b)|(@[\w.]+)|([A-Za-z_]\w*)/g
+
+    /** Panel-level hover feedback shared by the toolbar buttons and the tree menu. */
+    const PANEL_CSS = [
+      '.pw-btn:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-border-l2)}',
+      '.pw-menu-item:hover{background:color-mix(in srgb, var(--dsw-alias-brand-primary) 22%, transparent);color:var(--dsw-alias-label-primary)}',
+    ].join('')
 
     /** Colors for the highlight layer: the host's own syntax palette, with
      *  theme-alias fallbacks. The shiki variables are the same ones the
@@ -1414,13 +1420,7 @@ window.__ModuleLoader__.load({
           if (event.target?.closest?.('input,textarea') !== null) return
           event.preventDefault()
           event.stopPropagation()
-          const rect = treeRef.current?.getBoundingClientRect()
-          if (rect === undefined) return
-          setMenu({
-            x: Math.max(0, Math.min(rect.width - 152, event.clientX - rect.left)),
-            y: Math.max(0, Math.min(rect.height - 96, event.clientY - rect.top)),
-            dir,
-          })
+          setMenu({ dir })
         }
         const menuItem = (label, onClick) => h('button', {
           type: 'button',
@@ -1428,7 +1428,7 @@ window.__ModuleLoader__.load({
           className: 'pw-menu-item',
           onClick,
           style: {
-            display: 'block', width: '100%', textAlign: 'left', padding: '4px 8px', border: 'none',
+            display: 'block', width: '100%', textAlign: 'center', padding: '5px 10px', border: 'none',
             background: 'transparent', color: token('label-primary'), fontSize: 12, cursor: 'pointer',
             borderRadius: 4, fontFamily: 'inherit',
           },
@@ -1451,15 +1451,9 @@ window.__ModuleLoader__.load({
               : treeRows
 
         return h('div', { style: styles.root },
+          h('style', null, PANEL_CSS),
           h('div', { style: styles.toolbar },
             h(Button, { label: t('open'), onClick: () => { void pickRoot() } }),
-            state.mode === 'manual' && state.sessionCwd !== ''
-              ? h(Button, {
-                label: `↺ ${t('follow')}`,
-                title: state.sessionCwd,
-                onClick: () => { void openRoot(state.sessionCwd, 'session') },
-              })
-              : null,
             h('input', {
               style: styles.input,
               value: state.rootDraft,
@@ -1503,22 +1497,22 @@ window.__ModuleLoader__.load({
                 style: styles.tree,
                 onContextMenu: event => openMenu(event, ''),
               },
-              treeBody,
+              treeBody),
               menu === null ? null : h('div', {
                 'data-pw-menu': 'true',
                 style: {
-                  position: 'absolute', left: menu.x, top: menu.y, zIndex: 30, minWidth: 148, padding: 4,
-                  background: token('bg-overlay'), border: `1px solid ${token('border-l1')}`, borderRadius: 6,
-                  boxShadow: '0 6px 20px rgba(0,0,0,.28)',
+                  position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+                  zIndex: 30, minWidth: 156, padding: 6,
+                  background: token('bg-overlay'), border: `1px solid ${token('border-l1')}`, borderRadius: 8,
+                  boxShadow: '0 10px 28px rgba(0,0,0,.34)',
                 },
               },
-              h('style', null, '.pw-menu-item:hover{background:var(--dsw-alias-bg-layer-2)}'),
               menuItem(t('newFile'), () => { beginCreate(menu.dir, 'file'); setMenu(null) }),
               menuItem(t('newFolder'), () => { beginCreate(menu.dir, 'folder'); setMenu(null) }),
               menuItem(t('refresh'), () => {
                 loadDirectory(menu.dir).catch(error => store.set({ notice: error.message }))
                 setMenu(null)
-              }))),
+              })),
               h('div', { style: styles.treeFoot },
                 h(Button, { label: t('newFile'), onClick: () => beginCreate('', 'file'), disabled: state.root === '' }),
                 h(Button, { label: t('newFolder'), onClick: () => beginCreate('', 'folder'), disabled: state.root === '' }))),
