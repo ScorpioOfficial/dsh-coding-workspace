@@ -487,7 +487,28 @@ export function apply(ctx) {
         sendJson(res, 200, { ok: true, path: wirePath(body.root, target), dir: info.isDirectory() })
         return
       }
-      if (suffix === 'api/mkfile' || suffix === 'api/mkdir') {
+      if (suffix === 'api/rename') {
+        const from = resolveInside(body.root, body.from ?? '')
+        const to = resolveInside(body.root, body.to ?? '')
+        if (from === path.resolve(body.root) || to === path.resolve(body.root)) {
+          throw fail(400, 'root-protected', 'the opened folder itself cannot be renamed')
+        }
+        // Windows quietly replaces an existing file on rename, so refuse first.
+        if (path.resolve(from) !== path.resolve(to) && existsSync(to)) {
+          throw fail(409, 'exists', 'that name is already taken')
+        }
+        try {
+          await fs.rename(from, to)
+        } catch (error) {
+          if (error.code === 'ENOENT') throw fail(404, 'missing', 'that file or folder is gone')
+          if (error.code === 'EEXIST' || error.code === 'EPERM' || error.code === 'EACCES') {
+            throw fail(409, 'exists', 'that name is already taken')
+          }
+          throw error
+        }
+        sendJson(res, 200, { ok: true, from: wirePath(body.root, from), to: wirePath(body.root, to) })
+        return
+      }      if (suffix === 'api/mkfile' || suffix === 'api/mkdir') {
         const asDirectory = suffix === 'api/mkdir'
         const target = resolveInside(body.root, body.path)
         if (path.basename(target) === '') throw fail(400, 'name-required', 'a name is required')

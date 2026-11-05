@@ -35,6 +35,7 @@ window.__ModuleLoader__.load({
       namePlaceholder: 'New name, then Enter',
       refresh: 'Refresh',
       delete: 'Delete',
+      rename: 'Rename',
       confirmDelete: 'Confirm delete',
       cancel: 'Cancel',
       pathPlaceholder: 'Paste a folder path…',
@@ -77,6 +78,7 @@ window.__ModuleLoader__.load({
       namePlaceholder: '输入名称后回车',
       refresh: '刷新',
       delete: '删除',
+      rename: '重命名',
       confirmDelete: '确认删除',
       cancel: '取消',
       pathPlaceholder: '粘贴文件夹路径…',
@@ -220,9 +222,10 @@ window.__ModuleLoader__.load({
         color: token('label-primary'), fontSize: 11.5, fontFamily: 'inherit',
       },
       pickerPanel: {
-        position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 40, width: 330, padding: 6,
-        background: token('bg-overlay'), border: `1px solid ${token('border-l1')}`, borderRadius: 8,
-        boxShadow: '0 12px 32px rgba(0,0,0,.34)',
+        position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 40, width: 340, padding: 6,
+        // A nested surface, not an overlay: the list must never read through.
+        background: token('bg-layer-1'), border: `1px solid ${token('border-l2')}`, borderRadius: 8,
+        boxShadow: '0 12px 32px rgba(0,0,0,.45)',
       },
       pickerRow: {
         display: 'flex', flexDirection: 'column', gap: 1, width: '100%', textAlign: 'left',
@@ -596,6 +599,8 @@ window.__ModuleLoader__.load({
         notice: '',
         busy: '',
         selected: '',
+        renaming: null,
+        renameDraft: '',
         termCollapsed: false,
         termHeight: 240,
         treeWidth: 180,
@@ -738,6 +743,29 @@ window.__ModuleLoader__.load({
         }
       }
 
+      /** Rename the pending entry in place; Enter and the blur both commit. */
+      async function commitRename() {
+        const { renaming, renameDraft, root } = store.get()
+        if (renaming === null) return
+        const name = renameDraft.trim()
+        // Close the editor first: Enter and its blur must not rename twice.
+        store.set({ renaming: null, renameDraft: '' })
+        if (name === '') return
+        const parent = renaming.includes('/') ? renaming.slice(0, renaming.lastIndexOf('/')) : ''
+        const target = parent === '' ? name : `${parent}/${name}`
+        if (target === renaming) return
+        try {
+          await api('/rename', { method: 'POST', body: JSON.stringify({ root, from: renaming, to: target }) })
+          const snapshot = store.get()
+          const open = snapshot.current
+          if (open !== null && open.path === renaming) store.set({ current: { ...open, path: target } })
+          if (snapshot.selected === renaming) store.set({ selected: target })
+          await loadDirectory(parent)
+        } catch (error) {
+          store.set({ notice: error.message })
+        }
+      }
+
       async function saveFile() {
         const { current, root } = store.get()
         if (current === null || current.content === current.saved) return
@@ -813,7 +841,7 @@ window.__ModuleLoader__.load({
        */
       function renderTree(nodes, expanded, activePath, rel, depth, out, view) {
         const entries = nodes[rel]
-        const { creating, draftName, onMenu, selected } = view
+        const { creating, draftName, onMenu, selected, renaming, renameDraft } = view
         if (creating !== null && creating.dir === rel) {
           out.push(h('div', {
             key: `pw-creating:${rel}`,
@@ -838,6 +866,26 @@ window.__ModuleLoader__.load({
         }
         if (entries === undefined) return
         for (const entry of entries) {
+          if (renaming === entry.path) {
+            out.push(h('div', {
+              key: `pw-renaming:${entry.path}`,
+              style: { ...styles.row, paddingLeft: 8 + depth * 12 },
+            },
+            h('span', { style: { ...styles.muted, width: 10, flex: '0 0 10px' } }, entry.dir ? '▸' : ''),
+            h('input', {
+              style: { ...styles.input, height: 18, fontSize: 11, flex: '1 1 auto', minWidth: 40 },
+              value: renameDraft,
+              autoFocus: true,
+              spellCheck: false,
+              onChange: event => store.set({ renameDraft: event.target.value }),
+              onKeyDown: (event) => {
+                if (event.key === 'Enter') { event.preventDefault(); void commitRename() }
+                else if (event.key === 'Escape') { event.preventDefault(); store.set({ renaming: null, renameDraft: '' }) }
+              },
+              onBlur: () => { void commitRename() },
+            })))
+            continue
+          }
           const open = expanded[entry.path] === true
           out.push(h('div', {
             key: entry.path,
@@ -1309,6 +1357,8 @@ window.__ModuleLoader__.load({
           draftName: state.draftName,
           onMenu: openMenu,
           selected: state.selected,
+          renaming: state.renaming,
+          renameDraft: state.renameDraft,
         })
         const current = state.current
         const dirty = current !== null && current.content !== current.saved
@@ -1340,7 +1390,7 @@ window.__ModuleLoader__.load({
               }),
               pickerOpen
                 ? h('div', { style: styles.pickerPanel, onMouseDown: event => event.stopPropagation() },
-                  h('style', null, '.pw-pick:hover{background:var(--dsw-alias-bg-layer-2)!important}'),
+                  h('style', null, '.pw-pick:hover{background:color-mix(in srgb, var(--dsw-alias-brand-primary) 24%, transparent)!important}'),
                   pickRow('auto', `${t('auto')}`, state.env?.venv ?? state.env?.system ?? t('noPython')),
                   pickRow('venv', t('venv'), state.env?.venv ?? t('noPython')),
                   pickRow('system', t('system'), state.env?.system ?? t('noPython')),
@@ -1403,9 +1453,10 @@ window.__ModuleLoader__.load({
                 'data-pw-menu': 'true',
                 style: {
                   position: 'absolute', left: '50%', top: menu.y, transform: 'translateX(-50%)',
-                  zIndex: 30, minWidth: 156, padding: 6,
-                  background: token('bg-overlay'), border: `1px solid ${token('border-l1')}`, borderRadius: 8,
-                  boxShadow: '0 10px 28px rgba(0,0,0,.34)',
+                  zIndex: 30, minWidth: 168, padding: 6,
+                  // Opaque surface: a menu over a terminal must not show through.
+                  background: token('bg-layer-1'), border: `1px solid ${token('border-l2')}`, borderRadius: 8,
+                  boxShadow: '0 12px 32px rgba(0,0,0,.45)',
                 },
               },
               menu.confirming === true
@@ -1419,6 +1470,16 @@ window.__ModuleLoader__.load({
                     loadDirectory(menu.dir).catch(error => store.set({ notice: error.message }))
                     setMenu(null)
                   }),
+                  menu.target === null
+                    ? null
+                    : menuItem(t('rename'), () => {
+                      const target = menu.target
+                      setMenu(null)
+                      store.set({
+                        renaming: target,
+                        renameDraft: target.includes('/') ? target.slice(target.lastIndexOf('/') + 1) : target,
+                      })
+                    }),
                   menu.target === null
                     ? null
                     : menuItem(t('delete'), () => setMenu({ ...menu, confirming: true }), true)))),
