@@ -357,6 +357,9 @@ window.__ModuleLoader__.load({
       newFolder: '+ Folder',
       namePlaceholder: 'New name, then Enter',
       refresh: 'Refresh',
+      delete: 'Delete',
+      confirmDelete: 'Confirm delete',
+      cancel: 'Cancel',
       pathPlaceholder: 'Paste a folder path…',
       empty: 'Pick a folder to start.',
       pickFile: 'Select a file to edit.',
@@ -392,6 +395,9 @@ window.__ModuleLoader__.load({
       newFolder: '+ 目录',
       namePlaceholder: '输入名称后回车',
       refresh: '刷新',
+      delete: '删除',
+      confirmDelete: '确认删除',
+      cancel: '取消',
       pathPlaceholder: '粘贴文件夹路径…',
       empty: '先选一个文件夹。',
       pickFile: '选择一个文件开始编辑。',
@@ -866,6 +872,7 @@ window.__ModuleLoader__.load({
         env: null,
         notice: '',
         busy: '',
+        selected: '',
       })
 
       /** One saved state per tab id, so several Coding workspaces stay independent. */
@@ -1079,7 +1086,7 @@ window.__ModuleLoader__.load({
        */
       function renderTree(nodes, expanded, activePath, rel, depth, out, view) {
         const entries = nodes[rel]
-        const { creating, draftName, onMenu } = view
+        const { creating, draftName, onMenu, selected } = view
         if (creating !== null && creating.dir === rel) {
           out.push(h('div', {
             key: `pw-creating:${rel}`,
@@ -1110,10 +1117,15 @@ window.__ModuleLoader__.load({
             style: {
               ...styles.row,
               paddingLeft: 8 + depth * 12,
-              background: activePath === entry.path ? token('bg-layer-2') : 'transparent',
+              background: selected === entry.path
+                ? 'color-mix(in srgb, var(--dsw-alias-brand-primary) 24%, transparent)'
+                : activePath === entry.path ? token('bg-layer-2') : 'transparent',
             },
             title: entry.path,
-            onClick: () => { void (entry.dir ? toggleDirectory(entry) : openFile(entry)) },
+            onClick: () => {
+              store.set({ selected: entry.path })
+              void (entry.dir ? toggleDirectory(entry) : openFile(entry))
+            },
             onContextMenu: event => onMenu(event, entry.dir ? entry.path : (entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : '')),
           },
           h('span', { style: { ...styles.muted, width: 10, flex: '0 0 10px' } }, entry.dir ? (open ? '▾' : '▸') : ''),
@@ -1431,23 +1443,45 @@ window.__ModuleLoader__.load({
           const rect = columnRef.current?.getBoundingClientRect()
           setMenu({ dir, y: rect === undefined ? 8 : Math.max(4, event.clientY - rect.top) })
         }
-        const menuItem = (label, onClick) => h('button', {
+        const menuItem = (label, onClick, danger) => h('button', {
           type: 'button',
           key: label,
           className: 'pw-menu-item',
           onClick,
           style: {
             display: 'block', width: '100%', textAlign: 'center', padding: '5px 10px', border: 'none',
-            background: 'transparent', color: token('label-primary'), fontSize: 12, cursor: 'pointer',
-            borderRadius: 4, fontFamily: 'inherit',
+            background: 'transparent',
+            color: danger === true ? token('state-error-primary') : token('label-primary'),
+            fontSize: 12, cursor: 'pointer', borderRadius: 4, fontFamily: 'inherit',
           },
         }, label)
+
+        /** Delete the menu's target, then refresh its parent and drop stale state. */
+        async function removeEntry(target) {
+          const parent = target.includes('/') ? target.slice(0, target.lastIndexOf('/')) : ''
+          setMenu(null)
+          try {
+            await api('/delete', { method: 'POST', body: JSON.stringify({ root: store.get().root, path: target }) })
+            const snapshot = store.get()
+            const open = snapshot.current
+            if (open !== null && (open.path === target || open.path.startsWith(`${target}/`))) {
+              store.set({ current: null })
+            }
+            if (snapshot.selected === target || snapshot.selected.startsWith(`${target}/`)) {
+              store.set({ selected: '' })
+            }
+            await loadDirectory(parent)
+          } catch (error) {
+            store.set({ notice: error.message })
+          }
+        }
 
         const treeRows = []
         renderTree(state.tree, state.expanded, state.current === null ? '' : state.current.path, '', 0, treeRows, {
           creating: state.creating,
           draftName: state.draftName,
           onMenu: openMenu,
+          selected: state.selected,
         })
         const current = state.current
         const dirty = current !== null && current.content !== current.saved
@@ -1516,12 +1550,18 @@ window.__ModuleLoader__.load({
                   boxShadow: '0 10px 28px rgba(0,0,0,.34)',
                 },
               },
-              menuItem(t('newFile'), () => { beginCreate(menu.dir, 'file'); setMenu(null) }),
-              menuItem(t('newFolder'), () => { beginCreate(menu.dir, 'folder'); setMenu(null) }),
-              menuItem(t('refresh'), () => {
-                loadDirectory(menu.dir).catch(error => store.set({ notice: error.message }))
-                setMenu(null)
-              }))),
+              menu.confirming === true
+                ? h(React.Fragment, null,
+                  menuItem(t('confirmDelete'), () => { void removeEntry(menu.dir) }, true),
+                  menuItem(t('cancel'), () => setMenu({ ...menu, confirming: false })))
+                : h(React.Fragment, null,
+                  menuItem(t('newFile'), () => { beginCreate(menu.dir, 'file'); setMenu(null) }),
+                  menuItem(t('newFolder'), () => { beginCreate(menu.dir, 'folder'); setMenu(null) }),
+                  menuItem(t('refresh'), () => {
+                    loadDirectory(menu.dir).catch(error => store.set({ notice: error.message }))
+                    setMenu(null)
+                  }),
+                  menuItem(t('delete'), () => setMenu({ ...menu, confirming: true }), true)))),
             h('div', { style: styles.editorPane },
               h('div', { style: styles.paneHead },
                 h('span', {

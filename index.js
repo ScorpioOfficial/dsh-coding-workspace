@@ -462,6 +462,19 @@ export function apply(ctx) {
         sendJson(res, 200, { ok: true, path: wirePath(body.root, target), size: Buffer.byteLength(String(body.content ?? ''), 'utf8') })
         return
       }
+      if (suffix === 'api/delete') {
+        const rel = String(body.path ?? '')
+        if (rel === '') throw fail(400, 'root-protected', 'the opened folder itself cannot be deleted')
+        const target = resolveInside(body.root, rel)
+        try {
+          await fs.rm(target, { recursive: true, force: false })
+        } catch (error) {
+          if (error.code === 'ENOENT') throw fail(404, 'missing', 'that file or folder is gone')
+          throw error
+        }
+        sendJson(res, 200, { ok: true, path: wirePath(body.root, target) })
+        return
+      }
       if (suffix === 'api/mkfile' || suffix === 'api/mkdir') {
         const asDirectory = suffix === 'api/mkdir'
         const target = resolveInside(body.root, body.path)
