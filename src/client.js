@@ -577,7 +577,7 @@ window.__ModuleLoader__.load({
         const clean = root.trim()
         store.set({
           root: clean, rootDraft: clean, mode, tree: {}, expanded: {}, current: null,
-          output: '', notice: '', runId: null, exitCode: null, running: false,
+          output: '', notice: '', runId: null, exitCode: null, running: false, ptyId: null,
         })
         try {
           const env = await api(`/env?root=${encodeURIComponent(clean)}`)
@@ -988,7 +988,17 @@ window.__ModuleLoader__.load({
                 return
               }
             } catch (error) {
-              if (!stopped) store.set({ running: false, busy: '', ptyId: null, notice: error.message })
+              if (!stopped) {
+                // A terminal this panel just replaced is expected to vanish;
+                // only a real failure deserves the red notice.
+                const replaced = /terminal is gone|pty-missing/i.test(String(error.message))
+                store.set({
+                  running: false,
+                  busy: '',
+                  ptyId: null,
+                  ...(replaced ? {} : { notice: error.message }),
+                })
+              }
               return
             }
             if (!stopped) timer = setTimeout(() => { void tick() }, 120)
@@ -1019,9 +1029,11 @@ window.__ModuleLoader__.load({
             const current = ptyState.current
             if (current.id !== null && current.root === snapshot.root) return current.id
             if (current.id !== null) {
-              try { await api('/pty/close', { method: 'POST', body: JSON.stringify({ termId: current.id }) }) } catch { /* already gone */ }
+              // Detach first: the poller must stop before the terminal it is
+              // reading disappears, or it would report a phantom failure.
               ptyState.current = { id: null, since: 0, root: '', shell: '' }
               store.set({ ptyId: null })
+              try { await api('/pty/close', { method: 'POST', body: JSON.stringify({ termId: current.id }) }) } catch { /* already gone */ }
             }
             try { fitRef.current?.fit() } catch { /* the pane may be hidden */ }
             const data = await api('/shell', {
